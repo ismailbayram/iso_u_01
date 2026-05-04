@@ -1,22 +1,28 @@
 #include <Arduino.h>
 
-const int ledPin = 2; // ESP32 built-in LED is usually GPIO 2 on esp32dev
-const unsigned long interval = 500;
-unsigned long previousMillis = 0;
+const int STM32_RX_PIN = 16; // ESP32 receives STM32 TX here
+const int STM32_TX_PIN = 17; // ESP32 transmits to STM32 RX here
+const int BAUD_RATE = 115200;
 
 void setup()
 {
-  pinMode(ledPin, OUTPUT);
-  digitalWrite(ledPin, LOW);
+  Serial.begin(BAUD_RATE);
+  while (!Serial) {
+    delay(10);
+  }
+  Serial.println("ESP32 serial bridge ready");
+
+  Serial2.begin(BAUD_RATE, SERIAL_8N1, STM32_RX_PIN, STM32_TX_PIN);
+  Serial.println("Serial2 started: RX=GPIO16, TX=GPIO17");
 }
 
 void loop()
 {
-  unsigned long currentMillis = millis();
+  while (Serial2.available()) {
+    Serial.write(Serial2.read());
+  }
 
-  if (currentMillis - previousMillis >= interval)
-  {
-    previousMillis = currentMillis;
-    digitalWrite(ledPin, !digitalRead(ledPin));
+  while (Serial.available()) {
+    Serial2.write(Serial.read());
   }
 }
