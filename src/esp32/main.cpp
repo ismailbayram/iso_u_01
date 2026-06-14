@@ -39,19 +39,22 @@ void playErrorTone()
 void setupDisplay()
 {
   Wire.begin(21, 22); // Initialize I2C with SDA=21 and SCL=22
-  while (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS))
+  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS))
   {
     Serial.println(F("OLED ekran baglantisi basarisiz!"));
     playErrorTone();
     // for(;;); // Don't lock up the code, just keep trying
   }
-
-  display.clearDisplay();
-  display.setTextSize(2);
-  display.setTextColor(SSD1306_WHITE);
-  display.setCursor(0, 0);
-  display.println("ISO U1'e hosgeldin!");
-  display.display();
+  else
+  {
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println("ISO U1'e");
+    display.println("Hos Geldin!");
+    display.display();
+  }
 }
 
 void setup()
@@ -64,6 +67,7 @@ void setup()
 
   Serial.begin(115200);
   playWelcomeTone();
+  delay(1000);
   setupDisplay();
 }
 
@@ -72,18 +76,18 @@ void loop()
   // Read joystick values
   int joyLx = analogRead(PIN_JOY_L_X);
   int joyLy = analogRead(PIN_JOY_L_Y);
+  joyLy = 4095 - joyLy; // Invert Y-axis for left joystick
   int joyRx = analogRead(PIN_JOY_R_X);
   int joyRy = analogRead(PIN_JOY_R_Y);
 
   // Print joystick values to Serial Monitor
-  Serial.print("Joy L: (");
   Serial.print(joyLx);
-  Serial.print(", ");
+  Serial.print(",");
   Serial.print(joyLy);
-  Serial.print(") | Joy R: (");
+  Serial.print(",");
   Serial.print(joyRx);
-  Serial.print(", ");
+  Serial.print(",");
   Serial.println(joyRy);
 
-  delay(500); // Delay to avoid flooding the serial monitor
+  delay(20); // Delay to avoid flooding the serial monitor
 }
