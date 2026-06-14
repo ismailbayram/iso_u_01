@@ -1,78 +1,89 @@
-#include <TinyGPS++.h>
+#include <Arduino.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <Wire.h>
 
-// GPS objemizi tanımlıyoruz
-TinyGPSPlus gps;
+// PIN Definitions
+#define PIN_BUZZER 25
+#define PIN_JOY_L_X 36
+#define PIN_JOY_L_Y 39
+#define PIN_JOY_R_X 34
+#define PIN_JOY_R_Y 35
 
-// ESP32'nin donanımsal Seri Port 2'sini (HardwareSerial) kullanacağız
-// Pin 16 = RX2, Pin 17 = TX2
-HardwareSerial gpsSerial(2);
+// OLED Display Definitions
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 32
+#define OLED_RESET -1       // Set -1 because the OLED display doesn't have a reset pin
+#define SCREEN_ADDRESS 0x3C // I2C Address, 0x3D or 0x3C
 
-void ekranaYazdir()
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+void playWelcomeTone()
 {
-  Serial.print("Konum: ");
-  if (gps.location.isValid())
+  tone(PIN_BUZZER, 659, 150); // Play E5 (659 Hz) for 150 ms
+  delay(150);                 // Wait for the tone to finish
+  tone(PIN_BUZZER, 830, 150); // Play F5 (830 Hz) for 150 ms
+  delay(150);                 // Wait for the tone to finish
+  tone(PIN_BUZZER, 987, 300); // Play G5 (987 Hz) for 300 ms
+  delay(300);                 // Wait for the tone to finish
+  noTone(PIN_BUZZER);         // Turn off the buzzer
+}
+
+void playErrorTone()
+{
+  tone(PIN_BUZZER, 330, 200); // Play E4 (330 Hz) for 200 ms
+  delay(200);                 // Wait for the tone to finish
+  noTone(PIN_BUZZER);         // Turn off the buzzer
+}
+
+void setupDisplay()
+{
+  Wire.begin(21, 22); // Initialize I2C with SDA=21 and SCL=22
+  while (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS))
   {
-    Serial.print(gps.location.lat(), 6); // Enlem
-    Serial.print(" , ");
-    Serial.print(gps.location.lng(), 6); // Boylam
-  }
-  else
-  {
-    Serial.print("UYDU ARANIYOR...");
+    Serial.println(F("OLED ekran baglantisi basarisiz!"));
+    playErrorTone();
+    // for(;;); // Don't lock up the code, just keep trying
   }
 
-  Serial.print(" | Yükseklik: ");
-  if (gps.altitude.isValid())
-  {
-    Serial.print(gps.altitude.meters());
-    Serial.print("m");
-  }
-  else
-  {
-    Serial.print("---");
-  }
-
-  Serial.print(" | Hız: ");
-  if (gps.speed.isValid())
-  {
-    Serial.print(gps.speed.kmph());
-    Serial.print(" km/h");
-  }
-  else
-  {
-    Serial.print("---");
-  }
-
-  Serial.print(" | Uydu Sayısı: ");
-  Serial.println(gps.satellites.value());
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println("ISO U1'e hosgeldin!");
+  display.display();
 }
 
 void setup()
 {
-  // Bilgisayar ile haberleşme hızı
+  pinMode(PIN_BUZZER, OUTPUT);
+  pinMode(PIN_JOY_L_X, INPUT);
+  pinMode(PIN_JOY_L_Y, INPUT);
+  pinMode(PIN_JOY_R_X, INPUT);
+  pinMode(PIN_JOY_R_Y, INPUT);
+
   Serial.begin(115200);
-
-  // GPS modülü ile haberleşme hızı (NEO-7M fabrikasyon olarak 9600 baud kullanır)
-  gpsSerial.begin(9600, SERIAL_8N1, 16, 17);
-
-  Serial.println("GPS Modülü Başlatılıyor... Lütfen bekleyin.");
+  playWelcomeTone();
+  setupDisplay();
 }
 
 void loop()
 {
-  // GPS'ten veri geldikçe TinyGPS kütüphanesine besliyoruz
-  while (gpsSerial.available() > 0)
-  {
-    if (gps.encode(gpsSerial.read()))
-    {
-      ekranaYazdir();
-    }
-  }
+  // Read joystick values
+  int joyLx = analogRead(PIN_JOY_L_X);
+  int joyLy = analogRead(PIN_JOY_L_Y);
+  int joyRx = analogRead(PIN_JOY_R_X);
+  int joyRy = analogRead(PIN_JOY_R_Y);
 
-  // Eğer 5 saniye boyunca hiç veri gelmiyorsa bağlantıyı kontrol et uyarısı verelim
-  if (millis() > 5000 && gps.charsProcessed() < 10)
-  {
-    Serial.println("Hata: GPS modülü bulunamadı, kabloları kontrol edin!");
-    delay(2000);
-  }
+  // Print joystick values to Serial Monitor
+  Serial.print("Joy L: (");
+  Serial.print(joyLx);
+  Serial.print(", ");
+  Serial.print(joyLy);
+  Serial.print(") | Joy R: (");
+  Serial.print(joyRx);
+  Serial.print(", ");
+  Serial.println(joyRy);
+
+  delay(500); // Delay to avoid flooding the serial monitor
 }
