@@ -2,6 +2,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
+// #include <BleGamepad.h>
 
 // PIN Definitions
 #define PIN_BUZZER 25
@@ -17,6 +18,7 @@
 #define SCREEN_ADDRESS 0x3C // I2C Address, 0x3D or 0x3C
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+// BleGamepad bleGamepad("ISO U1 Gamepad", "ISO", 100);
 
 void playWelcomeTone()
 {
@@ -43,7 +45,6 @@ void setupDisplay()
   {
     Serial.println(F("OLED ekran baglantisi basarisiz!"));
     playErrorTone();
-    // for(;;); // Don't lock up the code, just keep trying
   }
   else
   {
@@ -55,6 +56,68 @@ void setupDisplay()
     display.println("Hos Geldin!");
     display.display();
   }
+}
+
+static float filteredLX = 2048;
+static float filteredLY = 2048;
+static float filteredRX = 2048;
+static float filteredRY = 2048;
+const float FILTER_COEFFICIENT = 0.15;
+
+void normalizeInputs(int *LX, int *LY, int *RX, int *RY)
+{
+  filteredLX = (*LX * FILTER_COEFFICIENT) + (filteredLX * (1.0 - FILTER_COEFFICIENT));
+  filteredLY = (*LY * FILTER_COEFFICIENT) + (filteredLY * (1.0 - FILTER_COEFFICIENT));
+  filteredRX = (*RX * FILTER_COEFFICIENT) + (filteredRX * (1.0 - FILTER_COEFFICIENT));
+  filteredRY = (*RY * FILTER_COEFFICIENT) + (filteredRY * (1.0 - FILTER_COEFFICIENT));
+
+  *LX = map(filteredLX, 0, 4095, 0, 32767);
+  *LY = map(4095 - filteredLY, 0, 4095, 0, 32767); // Invert LY for throttle
+  *RX = map(filteredRX, 0, 4095, 0, 32767);
+  *RY = map(filteredRY, 0, 4095, 0, 32767);
+
+  int LX_CENTER = 13800;
+  int RX_CENTER = 14400;
+  int RY_CENTER = 14200;
+
+  if (*LX <= LX_CENTER)
+  {
+    *LX = map(*LX, 0, LX_CENTER, 0, 16384);
+  }
+  else
+  {
+    *LX = map(*LX, LX_CENTER, 32767, 16384, 32767);
+  }
+
+  if (*RX <= RX_CENTER)
+  {
+    *RX = map(*RX, 0, RX_CENTER, 0, 16384);
+  }
+  else
+  {
+    *RX = map(*RX, RX_CENTER, 32767, 16384, 32767);
+  }
+
+  if (*RY <= RY_CENTER)
+  {
+    *RY = map(*RY, 0, RY_CENTER, 0, 16384);
+  }
+  else
+  {
+    *RY = map(*RY, RY_CENTER, 32767, 16384, 32767);
+  }
+
+  if (*LX > 16200 && *LX < 16500)
+    *LX = 16384;
+  if (*RX > 16200 && *RX < 16500)
+    *RX = 16384;
+  if (*RY > 16200 && *RY < 16500)
+    *RY = 16384;
+
+  *LX = constrain(*LX, 0, 32767);
+  *LY = constrain(*LY, 0, 32767);
+  *RX = constrain(*RX, 0, 32767);
+  *RY = constrain(*RY, 0, 32767);
 }
 
 void setup()
@@ -69,25 +132,39 @@ void setup()
   playWelcomeTone();
   delay(1000);
   setupDisplay();
+
+  // Serial.println("Bluetooth initialization...");
+  // bleGamepad.begin();
 }
 
 void loop()
 {
-  // Read joystick values
-  int joyLx = analogRead(PIN_JOY_L_X);
-  int joyLy = analogRead(PIN_JOY_L_Y);
-  joyLy = 4095 - joyLy; // Invert Y-axis for left joystick
-  int joyRx = analogRead(PIN_JOY_R_X);
-  int joyRy = analogRead(PIN_JOY_R_Y);
+  int LX = analogRead(PIN_JOY_L_X);
+  int LY = analogRead(PIN_JOY_L_Y);
+  int RX = analogRead(PIN_JOY_R_X);
+  int RY = analogRead(PIN_JOY_R_Y);
+  normalizeInputs(&LX, &LY, &RX, &RY);
 
-  // Print joystick values to Serial Monitor
-  Serial.print(joyLx);
-  Serial.print(",");
-  Serial.print(joyLy);
-  Serial.print(",");
-  Serial.print(joyRx);
-  Serial.print(",");
-  Serial.println(joyRy);
+  // if (bleGamepad.isConnected())
+  // {
+  // bleGamepad.setLeftThumb(LX, LY);
+  // bleGamepad.setRightThumb(RX, RY);
+  // bleGamepad.sendReport();
 
-  delay(20); // Delay to avoid flooding the serial monitor
+  Serial.print("LX");
+  Serial.print(LX);
+  Serial.print(" | LY");
+  Serial.print(LY);
+  Serial.print(" | RX");
+  Serial.print(RX);
+  Serial.print(" | RY");
+  Serial.print(RY);
+  Serial.println();
+  // }
+  // else
+  // {
+  //   Serial.println("Bluetooth not connected.");
+  // }
+
+  delay(15); // Small delay to avoid flooding the serial output
 }
