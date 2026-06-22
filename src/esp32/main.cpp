@@ -6,10 +6,14 @@
 
 // PIN Definitions
 #define PIN_BUZZER 25
+
 #define PIN_JOY_L_X 36
 #define PIN_JOY_L_Y 39
 #define PIN_JOY_R_X 34
 #define PIN_JOY_R_Y 35
+
+#define PIN_RX2 16
+#define PIN_TX2 17
 
 // OLED Display Definitions
 #define SCREEN_WIDTH 128
@@ -18,6 +22,7 @@
 #define SCREEN_ADDRESS 0x3C // I2C Address, 0x3D or 0x3C
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+HardwareSerial Lora(2);
 // BleGamepad bleGamepad("ISO U1 Gamepad", "ISO", 100);
 
 void playWelcomeTone()
