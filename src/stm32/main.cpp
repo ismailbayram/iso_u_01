@@ -2,7 +2,13 @@
 #include <Servo.h>
 
 Servo myESC;
+Servo servo1;
+Servo servo2;
+Servo servo3;
 #define PIN_ESC PA0
+#define PIN_SERVO1 PA6
+#define PIN_SERVO2 PA7
+#define PIN_SERVO3 PB0
 #define PIN_LED PC13
 
 #define LORA_M0 PA1
@@ -23,6 +29,7 @@ struct __attribute__((packed)) ControlPacket
 };
 
 ControlPacket receivedPacket;
+unsigned long lastTelemetryTime = 0;
 
 bool waitLoRaReady(unsigned long timeout)
 {
@@ -53,22 +60,35 @@ void setup()
     delay(200);
 
     myESC.attach(PIN_ESC, MIN_THROTTLE, MAX_THROTTLE);
+    servo1.attach(PIN_SERVO1);
+    servo2.attach(PIN_SERVO2);
+    servo3.attach(PIN_SERVO3);
 
     Serial1.begin(9600);
 }
 
 void loop()
 {
-    if (waitLoRaReady(50) && Serial1.available() >= (int)sizeof(ControlPacket))
+    if (Serial1.available() >= (int)sizeof(ControlPacket))
     {
         Serial1.readBytes((uint8_t *)&receivedPacket, sizeof(ControlPacket));
 
         digitalWrite(PIN_LED, !digitalRead(PIN_LED));
 
-        if (waitLoRaReady(50))
+        servo1.write(map(receivedPacket.LX, 0, 32767, 0, 180));
+        servo2.write(map(receivedPacket.LY, 0, 32767, 0, 180));
+        servo3.write(map(receivedPacket.RX, 0, 32767, 0, 180));
+    }
+
+    if (millis() - lastTelemetryTime > 500)
+    {
+        if (digitalRead(LORA_AUX) == HIGH)
         {
-            Serial1.println("VOLT:" + String(getBatteryVoltage()) + "V\n");
-            Serial1.flush();
+            Serial1.print("V:");
+            Serial1.print(getBatteryVoltage(), 1);
+            Serial1.print("\n");
+
+            lastTelemetryTime = millis();
         }
     }
 }

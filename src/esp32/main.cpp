@@ -222,15 +222,15 @@ void loop()
   // bleGamepad.setRightThumb(RX, RY);
   // bleGamepad.sendReport();
 
-  // Serial.print("LX");
-  // Serial.print(LX);
-  // Serial.print(" | LY");
-  // Serial.print(LY);
-  // Serial.print(" | RX");
-  // Serial.print(RX);
-  // Serial.print(" | RY");
-  // Serial.print(RY);
-  // Serial.println();
+  Serial.print("LX");
+  Serial.print(LX);
+  Serial.print(" | LY");
+  Serial.print(LY);
+  Serial.print(" | RX");
+  Serial.print(RX);
+  Serial.print(" | RY");
+  Serial.print(RY);
+  Serial.println();
   // }
   // else
   // {
