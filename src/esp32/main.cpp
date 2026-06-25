@@ -17,6 +17,7 @@
 
 #define LORA_M0 18
 #define LORA_M1 5
+#define LORA_AUX 4
 
 // OLED Display Definitions
 #define SCREEN_WIDTH 128
@@ -40,6 +41,18 @@ struct __attribute__((packed)) ControlPacket
 
 ControlPacket controlPacket;
 uint32_t packetCounter = 0;
+
+bool waitLoRaReady(unsigned long timeout)
+{
+  unsigned long start = millis();
+  while (digitalRead(LORA_AUX) == LOW)
+  {
+    if (millis() - start > timeout)
+      return false;
+    yield();
+  }
+  return true;
+}
 
 void playWelcomeTone()
 {
@@ -151,6 +164,7 @@ void setup()
 
   pinMode(LORA_M0, OUTPUT);
   pinMode(LORA_M1, OUTPUT);
+  pinMode(LORA_AUX, INPUT);
 
   digitalWrite(LORA_M0, LOW);
   digitalWrite(LORA_M1, LOW);
@@ -184,8 +198,8 @@ void loop()
   controlPacket.LY = LY;
   controlPacket.RX = RX;
   controlPacket.RY = RY;
-  LoRa.write((uint8_t *)&controlPacket, sizeof(controlPacket));
 
+  // wait for 10 milliseconds to listen for any incoming data from the STM32
   unsigned long listenStart = millis();
   while (millis() - listenStart < 10)
   {
@@ -194,6 +208,12 @@ void loop()
       char c = LoRa.read();
       Serial.print(c);
     }
+  }
+
+  if (waitLoRaReady(50))
+  {
+    LoRa.write((uint8_t *)&controlPacket, sizeof(controlPacket));
+    LoRa.flush();
   }
 
   // if (bleGamepad.isConnected())
