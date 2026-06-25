@@ -60,9 +60,18 @@ void setup()
     delay(200);
 
     myESC.attach(PIN_ESC, MIN_THROTTLE, MAX_THROTTLE);
+    myESC.writeMicroseconds(MIN_THROTTLE);
+
     servo1.attach(PIN_SERVO1);
     servo2.attach(PIN_SERVO2);
     servo3.attach(PIN_SERVO3);
+    pinMode(PIN_SERVO1, OUTPUT_OPEN_DRAIN);
+    pinMode(PIN_SERVO2, OUTPUT_OPEN_DRAIN);
+    pinMode(PIN_SERVO3, OUTPUT_OPEN_DRAIN);
+
+    servo1.write(90);
+    servo2.write(90);
+    servo3.write(90);
 
     Serial1.begin(9600);
 }

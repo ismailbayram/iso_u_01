@@ -32,6 +32,8 @@ Bu bölümde, STM32F411CEU6 (Black Pill) kartının uçak bileşenleri arasında
 | Bileşen                | Bileşen Pini                                            | STM32F411CEU6 (Black Pill) Pini                                                                                 | İşlevi / Açıklaması                                                     |
 | :--------------------- | :------------------------------------------------------ | :-------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------- |
 | **LoRa (E22-900T22D)** | VCC <br> GND <br> RXD <br> TXD <br> **AUX** <br> **M0** <br> **M1** | **3.3V** <br> **GND** <br> **PA9 (Serial1 TX)** <br> **PA10 (Serial1 RX)** <br> **PA3 (GPIO, INPUT)** <br> **PA1 (GPIO, LOW)** <br> **PA2 (GPIO, LOW)** | USART1 Haberleşme Hattı — AUX modül durumu için INPUT, M0/M1 normal mod (LOW) |
-| **Servo 1 (Roll)** | Sinyal <br> VCC <br> GND | **PA6 (TIM3_CH1)** <br> **5V** <br> **GND** | Kumanda sol stick X ekseni — kanat/roll kontrolü |
-| **Servo 2 (Pitch)** | Sinyal <br> VCC <br> GND | **PA7 (TIM3_CH2)** <br> **5V** <br> **GND** | Kumanda sol stick Y ekseni — irtifa/pitch kontrolü |
-| **Servo 3 (Yaw)** | Sinyal <br> VCC <br> GND | **PB0 (TIM3_CH3)** <br> **5V** <br> **GND** | Kumanda sağ stick X ekseni — dümen/yaw kontrolü |
+| **Servo 1 (Roll)** | Sinyal <br> VCC <br> GND | **PA6 (TIM3_CH1, open-drain)** <br> **5V** <br> **GND** | Kumanda sol stick X ekseni — kanat/roll kontrolü |
+| **Servo 2 (Pitch)** | Sinyal <br> VCC <br> GND | **PA7 (TIM3_CH2, open-drain)** <br> **5V** <br> **GND** | Kumanda sol stick Y ekseni — irtifa/pitch kontrolü |
+| **Servo 3 (Yaw)** | Sinyal <br> VCC <br> GND | **PB0 (TIM3_CH3, open-drain)** <br> **5V** <br> **GND** | Kumanda sağ stick X ekseni — dümen/yaw kontrolü |
+
+> ⚠️ **Open-Drain ve Pull-Up** — ESC ve servo sinyal pinleri open-drain modunda çalışır. Her sinyal hattında **4.7kΩ–10kΩ pull-up direnci** 5V hattına bağlanmalıdır. Aksi halde sinyal 3.3V'de kalır ve servo/ESC çalışmayabilir.

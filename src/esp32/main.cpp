@@ -210,11 +210,7 @@ void loop()
     }
   }
 
-  if (waitLoRaReady(50))
-  {
-    LoRa.write((uint8_t *)&controlPacket, sizeof(controlPacket));
-    LoRa.flush();
-  }
+  LoRa.write((uint8_t *)&controlPacket, sizeof(controlPacket));
 
   // if (bleGamepad.isConnected())
   // {
