@@ -15,6 +15,9 @@
 #define PIN_RX2 16
 #define PIN_TX2 17
 
+#define LORA_M0 18
+#define LORA_M1 5
+
 // OLED Display Definitions
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 32
@@ -22,8 +25,21 @@
 #define SCREEN_ADDRESS 0x3C // I2C Address, 0x3D or 0x3C
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-HardwareSerial Lora(2);
+HardwareSerial LoRa(2);
 // BleGamepad bleGamepad("ISO U1 Gamepad", "ISO", 100);
+
+struct __attribute__((packed)) ControlPacket
+{
+  uint16_t packetID;
+
+  uint16_t LX;
+  uint16_t LY;
+  uint16_t RX;
+  uint16_t RY;
+};
+
+ControlPacket controlPacket;
+uint32_t packetCounter = 0;
 
 void playWelcomeTone()
 {
@@ -133,10 +149,21 @@ void setup()
   pinMode(PIN_JOY_R_X, INPUT);
   pinMode(PIN_JOY_R_Y, INPUT);
 
+  pinMode(LORA_M0, OUTPUT);
+  pinMode(LORA_M1, OUTPUT);
+
+  digitalWrite(LORA_M0, LOW);
+  digitalWrite(LORA_M1, LOW);
+
+  delay(200);
+
   Serial.begin(115200);
+  LoRa.begin(9600, SERIAL_8N1, PIN_RX2, PIN_TX2);
   playWelcomeTone();
   delay(1000);
   setupDisplay();
+
+  // TODO: setup three way commnication between STM32
 
   // Serial.println("Bluetooth initialization...");
   // bleGamepad.begin();
@@ -150,26 +177,45 @@ void loop()
   int RY = analogRead(PIN_JOY_R_Y);
   normalizeInputs(&LX, &LY, &RX, &RY);
 
+  // TODO: use CRC16 or CRC32 for packet integrity check
+
+  controlPacket.packetID = packetCounter++;
+  controlPacket.LX = LX;
+  controlPacket.LY = LY;
+  controlPacket.RX = RX;
+  controlPacket.RY = RY;
+  LoRa.write((uint8_t *)&controlPacket, sizeof(controlPacket));
+
+  unsigned long listenStart = millis();
+  while (millis() - listenStart < 10)
+  {
+    if (LoRa.available())
+    {
+      char c = LoRa.read();
+      Serial.print(c);
+    }
+  }
+
   // if (bleGamepad.isConnected())
   // {
   // bleGamepad.setLeftThumb(LX, LY);
   // bleGamepad.setRightThumb(RX, RY);
   // bleGamepad.sendReport();
 
-  Serial.print("LX");
-  Serial.print(LX);
-  Serial.print(" | LY");
-  Serial.print(LY);
-  Serial.print(" | RX");
-  Serial.print(RX);
-  Serial.print(" | RY");
-  Serial.print(RY);
-  Serial.println();
+  // Serial.print("LX");
+  // Serial.print(LX);
+  // Serial.print(" | LY");
+  // Serial.print(LY);
+  // Serial.print(" | RX");
+  // Serial.print(RX);
+  // Serial.print(" | RY");
+  // Serial.print(RY);
+  // Serial.println();
   // }
   // else
   // {
   //   Serial.println("Bluetooth not connected.");
   // }
 
-  delay(15); // Small delay to avoid flooding the serial output
+  delay(20); // Small delay to avoid flooding the serial output
 }

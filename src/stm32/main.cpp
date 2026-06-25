@@ -2,55 +2,48 @@
 #include <Servo.h>
 
 Servo myESC;
-const int escPin = PA0;  // ESC Beyaz Kablo (5V Tolerant)
-const int ledPin = PC13; // Blackpill üzerindeki dahili Mavi LED (Gerekirse PB12 veya PC13 yapabilirsin)
+#define PIN_ESC PA0
+#define PIN_LED PC13
 
-const int MIN_GAZ = 1100;
-const int MAKS_GAZ = 1940;
+const int MIN_THROTTLE = 1100;
+const int MAX_THROTTLE = 1940;
+
+struct __attribute__((packed)) ControlPacket
+{
+    uint16_t packetID;
+
+    uint16_t LX;
+    uint16_t LY;
+    uint16_t RX;
+    uint16_t RY;
+};
+
+ControlPacket receivedPacket;
+
+float getBatteryVoltage()
+{
+    return 12.4;
+}
 
 void setup()
 {
-    // LED ve ESC Pin Ayarları
-    pinMode(ledPin, OUTPUT);
-    pinMode(escPin, OUTPUT_OPEN_DRAIN); // 5V sinyal sürmek için Open-Drain modu
+    pinMode(PIN_LED, OUTPUT);
+    pinMode(PIN_ESC, OUTPUT_OPEN_DRAIN); // open-drain mode for ESC signal
 
-    // 1. HAZIRLIK AŞAMASI: Hızlı hızlı LED kırp (5 Saniye Geri Sayım)
-    // Bu süreçte ESC'ye hiçbir sinyal gitmez, sadece seni uyarır.
-    for (int i = 0; i < 25; i++)
-    {
-        digitalWrite(ledPin, LOW); // Blackpill'de LOW led'i yakar
-        delay(100);
-        digitalWrite(ledPin, HIGH); // HIGH led'i söndürür
-        delay(100);
-    }
+    myESC.attach(PIN_ESC, MIN_THROTTLE, MAX_THROTTLE);
 
-    // STM32 Dahili Servo donanımını başlat
-    myESC.attach(escPin, MIN_GAZ, MAKS_GAZ);
-
-    // 2. ADIM: Maksimum gaz basılıyor ve LED SABİT yanıyor
-    // LED yandığı an LİPO PİLİ TAKMALISIN!
-    digitalWrite(ledPin, LOW); // LED Sabit Yanık (Maksimum gaz başladı)
-    myESC.writeMicroseconds(MAKS_GAZ);
-
-    delay(4000); // Pili takman ve ESC'nin "Bip-Bip" demesi için gereken süre
-
-    // 3. ADIM: Minimum gaz basılıyor ve LED SÖNÜYOR
-    myESC.writeMicroseconds(MIN_GAZ);
-    digitalWrite(ledPin, HIGH); // LED Söndü (Minimum gaza düşüldü)
-
-    delay(4000); // ESC'nin hafızaya kaydedip uzun "Biiiiip" sesini vermesi için bekleme
+    Serial1.begin(9600); // Initialize Serial1 for communication with LoRa module
 }
 
 void loop()
 {
-    // Kalibrasyon bitti. Motor 4 saniye dönecek, 4 saniye duracak.
-    // Motor dönerken dahili LED de sana bilgi vermek için yanıp sönecek.
+    if (Serial1.available() >= (int)sizeof(ControlPacket))
+    {
 
-    digitalWrite(ledPin, LOW);             // LED Yanık -> Motor Dönüyor
-    myESC.writeMicroseconds(MIN_GAZ + 80); // Güvenli düşük hız
-    delay(4000);
+        Serial1.readBytes((uint8_t *)&receivedControls, sizeof(ControlPacket));
 
-    digitalWrite(ledPin, HIGH); // LED Sönük -> Motor Durdu
-    myESC.writeMicroseconds(MIN_GAZ);
-    delay(4000);
+        digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+
+        Serial1.println("VOLT:" + String(getBatteryVoltage()) + "V\n");
+    }
 }
