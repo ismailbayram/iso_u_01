@@ -32,7 +32,6 @@ HardwareSerial LoRa(2);
 struct __attribute__((packed)) ControlPacket
 {
   uint16_t packetID;
-
   uint16_t LX;
   uint16_t LY;
   uint16_t RX;
@@ -40,19 +39,8 @@ struct __attribute__((packed)) ControlPacket
 };
 
 ControlPacket controlPacket;
-uint32_t packetCounter = 0;
-
-bool waitLoRaReady(unsigned long timeout)
-{
-  unsigned long start = millis();
-  while (digitalRead(LORA_AUX) == LOW)
-  {
-    if (millis() - start > timeout)
-      return false;
-    yield();
-  }
-  return true;
-}
+uint16_t packetCounter = 0;
+unsigned long lastSendTime = 0;
 
 void playWelcomeTone()
 {
@@ -185,53 +173,38 @@ void setup()
 
 void loop()
 {
-  int LX = analogRead(PIN_JOY_L_X);
-  int LY = analogRead(PIN_JOY_L_Y);
-  int RX = analogRead(PIN_JOY_R_X);
-  int RY = analogRead(PIN_JOY_R_Y);
-  normalizeInputs(&LX, &LY, &RX, &RY);
-
-  // TODO: use CRC16 or CRC32 for packet integrity check
-
-  controlPacket.packetID = packetCounter++;
-  controlPacket.LX = LX;
-  controlPacket.LY = LY;
-  controlPacket.RX = RX;
-  controlPacket.RY = RY;
-
-  // wait for 10 milliseconds to listen for any incoming data from the STM32
-  unsigned long listenStart = millis();
-  while (millis() - listenStart < 10)
+  // 1. Telemetriyi her an kesintisiz dinle
+  while (LoRa.available())
   {
-    if (LoRa.available())
-    {
-      char c = LoRa.read();
-      Serial.print(c);
-    }
+    char c = LoRa.read();
+    Serial.print(c); // STM32'den gelen "V:12.4" bilgisini bilgisayara basar
   }
 
-  LoRa.write((uint8_t *)&controlPacket, sizeof(controlPacket));
+  // 2. Tam olarak her 20ms'de bir paket fırlat (Zoraki beklemeler, delay'ler YOK!)
+  if (millis() - lastSendTime >= 20)
+  {
+    lastSendTime = millis();
 
-  // if (bleGamepad.isConnected())
-  // {
-  // bleGamepad.setLeftThumb(LX, LY);
-  // bleGamepad.setRightThumb(RX, RY);
-  // bleGamepad.sendReport();
+    int rawLX = analogRead(PIN_JOY_L_X);
+    int rawLY = analogRead(PIN_JOY_L_Y);
+    int rawRX = analogRead(PIN_JOY_R_X);
+    int rawRY = analogRead(PIN_JOY_R_Y);
+    normalizeInputs(&rawLX, &rawLY, &rawRX, &rawRY);
 
-  Serial.print("LX");
-  Serial.print(LX);
-  Serial.print(" | LY");
-  Serial.print(LY);
-  Serial.print(" | RX");
-  Serial.print(RX);
-  Serial.print(" | RY");
-  Serial.print(RY);
-  Serial.println();
-  // }
-  // else
-  // {
-  //   Serial.println("Bluetooth not connected.");
-  // }
+    controlPacket.packetID = packetCounter++;
+    // ESP32'nin 4 byte'lık int değerlerini güvenli bir şekilde 2 byte'a kırpıyoruz
+    controlPacket.LX = (uint16_t)rawLX;
+    controlPacket.LY = (uint16_t)rawLY;
+    controlPacket.RX = (uint16_t)rawRX;
+    controlPacket.RY = (uint16_t)rawRY;
 
-  delay(20); // Small delay to avoid flooding the serial output
+    if (digitalRead(LORA_AUX) == HIGH)
+    {
+      LoRa.write((uint8_t *)&controlPacket, sizeof(ControlPacket));
+    }
+
+    // Debug Çıktısı
+    Serial.print("Gonderilen ID: ");
+    Serial.println(controlPacket.packetID);
+  }
 }
