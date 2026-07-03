@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <LoRa_E22.h>
 #include <Wire.h>
 // #include <BleGamepad.h>
 
@@ -27,6 +28,7 @@
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 HardwareSerial LoRa(2);
+LoRa_E22 e22(&LoRa, LORA_AUX, LORA_M0, LORA_M1, UART_BPS_RATE_9600);
 // BleGamepad bleGamepad("ISO U1 Gamepad", "ISO", 100);
 
 struct __attribute__((packed)) ControlPacket
@@ -50,10 +52,14 @@ ControlPacket controlPacket;
 uint16_t packetCounter = 0;
 unsigned long lastSendTime = 0;
 unsigned long lastDebugTime = 0;
+unsigned long bootTime = 0;
+unsigned long lastBootEchoTime = 0;
+bool loraSetupDone = false;
+bool loraSetupChanged = false;
 
 const uint8_t FRAME_PREAMBLE_1 = 0xAA;
 const uint8_t FRAME_PREAMBLE_2 = 0x55;
-const unsigned long DEBUG_PRINT_INTERVAL_MS = 200;
+const unsigned long DEBUG_PRINT_INTERVAL_MS = 20;
 const unsigned long SEND_INTERVAL_MS = 20;
 
 uint8_t computeChecksum(const uint8_t *data, size_t len)
@@ -64,6 +70,67 @@ uint8_t computeChecksum(const uint8_t *data, size_t len)
     crc ^= data[i];
   }
   return crc;
+}
+
+void setupLoRaWithLibrary()
+{
+  Serial.println("[E22] setup basliyor...");
+
+  if (!e22.begin())
+  {
+    Serial.println("[E22] begin basarisiz");
+    loraSetupDone = false;
+    return;
+  }
+
+  ResponseStructContainer c = e22.getConfiguration();
+  if (c.status.code != E22_SUCCESS)
+  {
+    Serial.print("[E22] config okunamadi: ");
+    Serial.println(c.status.getResponseDescription());
+    c.close();
+    loraSetupDone = false;
+    return;
+  }
+
+  Configuration cfg = *(Configuration *)c.data;
+  c.close();
+
+  bool changed = false;
+
+  if (cfg.SPED.uartBaudRate != UART_BPS_9600)
+  {
+    cfg.SPED.uartBaudRate = UART_BPS_9600;
+    changed = true;
+  }
+
+  if (cfg.SPED.airDataRate != AIR_DATA_RATE_111_625)
+  {
+    cfg.SPED.airDataRate = AIR_DATA_RATE_111_625;
+    changed = true;
+  }
+
+  if (cfg.TRANSMISSION_MODE.WORTransceiverControl != WOR_RECEIVER)
+  {
+    cfg.TRANSMISSION_MODE.WORTransceiverControl = WOR_RECEIVER;
+    changed = true;
+  }
+
+  if (changed)
+  {
+    ResponseStatus rs = e22.setConfiguration(cfg, WRITE_CFG_PWR_DWN_SAVE);
+    Serial.print("[E22] kaydet: ");
+    Serial.println(rs.getResponseDescription());
+    loraSetupChanged = true;
+  }
+  else
+  {
+    Serial.println("[E22] ayar zaten uygun");
+    loraSetupChanged = false;
+  }
+
+  e22.setMode(MODE_0_NORMAL);
+  loraSetupDone = true;
 }
 
 void playWelcomeTone()
@@ -184,7 +251,9 @@ void setup()
   delay(200);
 
   Serial.begin(115200);
-  LoRa.begin(9600, SERIAL_8N1, PIN_RX2, PIN_TX2);
+  setupLoRaWithLibrary();
+  bootTime = millis();
+
   playWelcomeTone();
   delay(1000);
   setupDisplay();
@@ -229,13 +298,22 @@ void loop()
       frame.checksum = computeChecksum((uint8_t *)&frame.payload, sizeof(ControlPacket));
 
       LoRa.write((uint8_t *)&frame, sizeof(ControlFrame));
-    }
 
-    if (millis() - lastDebugTime >= DEBUG_PRINT_INTERVAL_MS)
-    {
-      lastDebugTime = millis();
-      Serial.print("Gonderilen ID: ");
-      Serial.println(controlPacket.packetID);
+      if (millis() - lastDebugTime >= DEBUG_PRINT_INTERVAL_MS)
+      {
+        lastDebugTime = millis();
+        Serial.print("Gonderilen ID: ");
+        Serial.println(controlPacket.packetID);
+      }
     }
+  }
+
+  if ((millis() - bootTime) < 10000 && (millis() - lastBootEchoTime) >= 2000)
+  {
+    lastBootEchoTime = millis();
+    Serial.print("[E22] setup=");
+    Serial.print(loraSetupDone ? "ok" : "fail");
+    Serial.print(" changed=");
+    Serial.println(loraSetupChanged ? "yes" : "no");
   }
 }

@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <LoRa_E22.h>
 #include <Servo.h>
 
 Servo myESC;
@@ -19,6 +20,7 @@ Servo servo3;
 #define FT232_RX PA12
 
 HardwareSerial Serial6(6);
+LoRa_E22 e22(&Serial1, LORA_AUX, LORA_M0, LORA_M1, UART_BPS_RATE_9600);
 
 const int MIN_THROTTLE = 1100;
 const int MAX_THROTTLE = 1940;
@@ -173,6 +175,55 @@ float getBatteryVoltage()
     return 12.4;
 }
 
+void setupLoRaWithLibrary()
+{
+    Serial6.println("[E22] setup basliyor...");
+
+    if (!e22.begin()) {
+        Serial6.println("[E22] begin basarisiz");
+        return;
+    }
+
+    ResponseStructContainer c = e22.getConfiguration();
+    if (c.status.code != E22_SUCCESS) {
+        Serial6.print("[E22] config okunamadi: ");
+        Serial6.println(c.status.getResponseDescription());
+        c.close();
+        return;
+    }
+
+    Configuration cfg = *(Configuration *)c.data;
+    c.close();
+
+    bool changed = false;
+
+    if (cfg.SPED.uartBaudRate != UART_BPS_9600) {
+        cfg.SPED.uartBaudRate = UART_BPS_9600;
+        changed = true;
+    }
+
+    if (cfg.SPED.airDataRate != AIR_DATA_RATE_111_625) {
+        cfg.SPED.airDataRate = AIR_DATA_RATE_111_625;
+        changed = true;
+    }
+
+    if (cfg.TRANSMISSION_MODE.WORTransceiverControl != WOR_RECEIVER) {
+        cfg.TRANSMISSION_MODE.WORTransceiverControl = WOR_RECEIVER;
+        changed = true;
+    }
+
+    if (changed) {
+        ResponseStatus rs = e22.setConfiguration(cfg, WRITE_CFG_PWR_DWN_SAVE);
+        Serial6.print("[E22] kaydet: ");
+        Serial6.println(rs.getResponseDescription());
+    } else {
+        Serial6.println("[E22] ayar zaten uygun");
+    }
+
+    e22.setMode(MODE_0_NORMAL);
+    Serial6.println("[E22] setup tamam");
+}
+
 void setup()
 {
     pinMode(PIN_LED, OUTPUT);
@@ -203,7 +254,8 @@ void setup()
     Serial6.setRx(FT232_RX);
     Serial6.begin(115200);
     Serial6.println("[MONITOR] FT232 baslatildi.");
-    Serial1.begin(9600);
+
+    setupLoRaWithLibrary();
 
     lastPacketTime = millis();
 }
