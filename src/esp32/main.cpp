@@ -3,6 +3,7 @@
 #include <Adafruit_SSD1306.h>
 #include <LoRa_E22.h>
 #include <Wire.h>
+#include "radio_protocol.h"
 // #include <BleGamepad.h>
 
 // PIN Definitions
@@ -31,22 +32,8 @@ HardwareSerial LoRa(2);
 LoRa_E22 e22(&LoRa, LORA_AUX, LORA_M0, LORA_M1, UART_BPS_RATE_9600);
 // BleGamepad bleGamepad("ISO U1 Gamepad", "ISO", 100);
 
-struct __attribute__((packed)) ControlPacket
-{
-  uint16_t packetID;
-  uint16_t LX;
-  uint16_t LY;
-  uint16_t RX;
-  uint16_t RY;
-};
-
-struct __attribute__((packed)) ControlFrame
-{
-  uint8_t preamble1;
-  uint8_t preamble2;
-  ControlPacket payload;
-  uint8_t checksum;
-};
+using radio::ControlPacket;
+using radio::TelemetryPacket;
 
 ControlPacket controlPacket;
 uint16_t packetCounter = 0;
@@ -56,20 +43,86 @@ unsigned long bootTime = 0;
 unsigned long lastBootEchoTime = 0;
 bool loraSetupDone = false;
 bool loraSetupChanged = false;
+unsigned long lastTelemetryPrintTime = 0;
 
-const uint8_t FRAME_PREAMBLE_1 = 0xAA;
-const uint8_t FRAME_PREAMBLE_2 = 0x55;
+uint8_t rxPacketType = 0;
+uint8_t rxPayloadLength = 0;
+uint8_t rxPayloadIndex = 0;
+uint8_t rxParserState = 0;
+uint8_t rxPayloadBuffer[64];
+TelemetryPacket lastTelemetry;
+
 const unsigned long DEBUG_PRINT_INTERVAL_MS = 20;
 const unsigned long SEND_INTERVAL_MS = 20;
 
-uint8_t computeChecksum(const uint8_t *data, size_t len)
+void sendFrame(uint8_t packetType, const void *payload, uint8_t payloadLength)
 {
-  uint8_t crc = 0;
-  for (size_t i = 0; i < len; i++)
+  const uint8_t *payloadBytes = (const uint8_t *)payload;
+  LoRa.write(radio::PREAMBLE_1);
+  LoRa.write(radio::PREAMBLE_2);
+  LoRa.write(packetType);
+  LoRa.write(payloadLength);
+  LoRa.write(payloadBytes, payloadLength);
+  LoRa.write(radio::computeFrameChecksum(packetType, payloadLength, payloadBytes));
+}
+
+bool parseIncomingLoRaByte(uint8_t b)
+{
+  switch (rxParserState)
   {
-    crc ^= data[i];
+  case 0:
+    if (b == radio::PREAMBLE_1)
+      rxParserState = 1;
+    break;
+  case 1:
+    if (b == radio::PREAMBLE_2)
+    {
+      rxParserState = 2;
+    }
+    else
+    {
+      rxParserState = (b == radio::PREAMBLE_1) ? 1 : 0;
+    }
+    break;
+  case 2:
+    rxPacketType = b;
+    rxParserState = 3;
+    break;
+  case 3:
+    rxPayloadLength = b;
+    rxPayloadIndex = 0;
+    if (rxPayloadLength == 0 || rxPayloadLength > sizeof(rxPayloadBuffer))
+    {
+      rxParserState = 0;
+    }
+    else
+    {
+      rxParserState = 4;
+    }
+    break;
+  case 4:
+    rxPayloadBuffer[rxPayloadIndex++] = b;
+    if (rxPayloadIndex >= rxPayloadLength)
+    {
+      rxParserState = 5;
+    }
+    break;
+  case 5:
+  {
+    uint8_t expected = radio::computeFrameChecksum(rxPacketType, rxPayloadLength, rxPayloadBuffer);
+    rxParserState = 0;
+    if (expected == b && rxPacketType == radio::PACKET_TYPE_TELEMETRY && rxPayloadLength == sizeof(TelemetryPacket))
+    {
+      memcpy(&lastTelemetry, rxPayloadBuffer, sizeof(TelemetryPacket));
+      return true;
+    }
+    break;
   }
-  return crc;
+  default:
+    rxParserState = 0;
+    break;
+  }
+  return false;
 }
 
 void setupLoRaWithLibrary()
@@ -222,6 +275,7 @@ void setup()
   delay(200);
 
   Serial.begin(115200);
+  Serial.println("[FW] esp32-telemetry-parser-v2");
   setupLoRaWithLibrary();
   bootTime = millis();
 
@@ -237,12 +291,26 @@ void setup()
 
 void loop()
 {
-  // 1. Telemetriyi her an kesintisiz dinle
-  // while (LoRa.available())
-  // {
-  //   char c = LoRa.read();
-  //   Serial.print(c); // STM32'den gelen "V:12.4" bilgisini bilgisayara basar
-  // }
+  while (LoRa.available())
+  {
+    if (parseIncomingLoRaByte((uint8_t)LoRa.read()))
+    {
+      if (millis() - lastTelemetryPrintTime > 200)
+      {
+        lastTelemetryPrintTime = millis();
+        Serial.print("[TEL] V=");
+        Serial.print(lastTelemetry.voltageMv / 1000.0f, 2);
+        Serial.print("V GPSfix=");
+        Serial.print(lastTelemetry.gpsFix);
+        Serial.print(" sats=");
+        Serial.print(lastTelemetry.gpsSats);
+        Serial.print(" lat=");
+        Serial.print(lastTelemetry.gpsLatE7 / 10000000.0, 6);
+        Serial.print(" lon=");
+        Serial.println(lastTelemetry.gpsLonE7 / 10000000.0, 6);
+      }
+    }
+  }
 
   if (millis() - lastSendTime >= SEND_INTERVAL_MS)
   {
@@ -262,29 +330,12 @@ void loop()
       controlPacket.RX = (uint16_t)rawRX;
       controlPacket.RY = (uint16_t)rawRY;
 
-      ControlFrame frame;
-      frame.preamble1 = FRAME_PREAMBLE_1;
-      frame.preamble2 = FRAME_PREAMBLE_2;
-      frame.payload = controlPacket;
-      frame.checksum = computeChecksum((uint8_t *)&frame.payload, sizeof(ControlPacket));
-
-      LoRa.write((uint8_t *)&frame, sizeof(ControlFrame));
+      sendFrame(radio::PACKET_TYPE_CONTROL, &controlPacket, sizeof(ControlPacket));
 
       if (millis() - lastDebugTime >= DEBUG_PRINT_INTERVAL_MS)
       {
         lastDebugTime = millis();
-        Serial.print("Gonderilen ID: ");
-        Serial.println(controlPacket.packetID);
       }
     }
-  }
-
-  if ((millis() - bootTime) < 10000 && (millis() - lastBootEchoTime) >= 2000)
-  {
-    lastBootEchoTime = millis();
-    Serial.print("[E22] setup=");
-    Serial.print(loraSetupDone ? "ok" : "fail");
-    Serial.print(" changed=");
-    Serial.println(loraSetupChanged ? "yes" : "no");
   }
 }
