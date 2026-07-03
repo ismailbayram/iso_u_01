@@ -34,10 +34,10 @@ LoRa_E22 e22(&LoRa, LORA_AUX, LORA_M0, LORA_M1, UART_BPS_RATE_9600);
 struct __attribute__((packed)) ControlPacket
 {
   uint16_t packetID;
-  uint8_t LX;
-  uint8_t LY;
-  uint8_t RX;
-  uint8_t RY;
+  uint16_t LX;
+  uint16_t LY;
+  uint16_t RX;
+  uint16_t RY;
 };
 
 struct __attribute__((packed)) ControlFrame
@@ -104,9 +104,9 @@ void setupLoRaWithLibrary()
     changed = true;
   }
 
-  if (cfg.SPED.airDataRate != AIR_DATA_RATE_111_625)
+  if (cfg.SPED.airDataRate != AIR_DATA_RATE_110_384)
   {
-    cfg.SPED.airDataRate = AIR_DATA_RATE_111_625;
+    cfg.SPED.airDataRate = AIR_DATA_RATE_110_384;
     changed = true;
   }
 
@@ -184,53 +184,24 @@ void normalizeInputs(int *LX, int *LY, int *RX, int *RY)
   filteredRX = (*RX * FILTER_COEFFICIENT) + (filteredRX * (1.0 - FILTER_COEFFICIENT));
   filteredRY = (*RY * FILTER_COEFFICIENT) + (filteredRY * (1.0 - FILTER_COEFFICIENT));
 
-  *LX = map(filteredLX, 0, 4095, 0, 32767);
-  *LY = map(4095 - filteredLY, 0, 4095, 0, 32767); // Invert LY for throttle
-  *RX = map(filteredRX, 0, 4095, 0, 32767);
-  *RY = map(filteredRY, 0, 4095, 0, 32767);
+  *LX = (int)filteredLX;
+  *LY = 4095 - (int)filteredLY; // Invert LY for throttle
+  *RX = (int)filteredRX;
+  *RY = (int)filteredRY;
 
-  int LX_CENTER = 13800;
-  int RX_CENTER = 14400;
-  int RY_CENTER = 14200;
+  const int center = 2048;
+  const int deadband = 18;
+  if (abs(*LX - center) < deadband)
+    *LX = center;
+  if (abs(*RX - center) < deadband)
+    *RX = center;
+  if (abs(*RY - center) < deadband)
+    *RY = center;
 
-  if (*LX <= LX_CENTER)
-  {
-    *LX = map(*LX, 0, LX_CENTER, 0, 16384);
-  }
-  else
-  {
-    *LX = map(*LX, LX_CENTER, 32767, 16384, 32767);
-  }
-
-  if (*RX <= RX_CENTER)
-  {
-    *RX = map(*RX, 0, RX_CENTER, 0, 16384);
-  }
-  else
-  {
-    *RX = map(*RX, RX_CENTER, 32767, 16384, 32767);
-  }
-
-  if (*RY <= RY_CENTER)
-  {
-    *RY = map(*RY, 0, RY_CENTER, 0, 16384);
-  }
-  else
-  {
-    *RY = map(*RY, RY_CENTER, 32767, 16384, 32767);
-  }
-
-  if (*LX > 16200 && *LX < 16500)
-    *LX = 16384;
-  if (*RX > 16200 && *RX < 16500)
-    *RX = 16384;
-  if (*RY > 16200 && *RY < 16500)
-    *RY = 16384;
-
-  *LX = constrain(*LX, 0, 32767);
-  *LY = constrain(*LY, 0, 32767);
-  *RX = constrain(*RX, 0, 32767);
-  *RY = constrain(*RY, 0, 32767);
+  *LX = constrain(*LX, 0, 4095);
+  *LY = constrain(*LY, 0, 4095);
+  *RX = constrain(*RX, 0, 4095);
+  *RY = constrain(*RY, 0, 4095);
 }
 
 void setup()
@@ -286,10 +257,10 @@ void loop()
     if (digitalRead(LORA_AUX) == HIGH)
     {
       controlPacket.packetID = packetCounter++;
-      controlPacket.LX = (uint8_t)map(rawLX, 0, 32767, 0, 255);
-      controlPacket.LY = (uint8_t)map(rawLY, 0, 32767, 0, 255);
-      controlPacket.RX = (uint8_t)map(rawRX, 0, 32767, 0, 255);
-      controlPacket.RY = (uint8_t)map(rawRY, 0, 32767, 0, 255);
+      controlPacket.LX = (uint16_t)rawLX;
+      controlPacket.LY = (uint16_t)rawLY;
+      controlPacket.RX = (uint16_t)rawRX;
+      controlPacket.RY = (uint16_t)rawRY;
 
       ControlFrame frame;
       frame.preamble1 = FRAME_PREAMBLE_1;

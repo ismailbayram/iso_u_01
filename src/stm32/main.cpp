@@ -28,10 +28,10 @@ const int MAX_THROTTLE = 1940;
 struct __attribute__((packed)) ControlPacket
 {
     uint16_t packetID;
-    uint8_t LX;
-    uint8_t LY;
-    uint8_t RX;
-    uint8_t RY;
+    uint16_t LX;
+    uint16_t LY;
+    uint16_t RX;
+    uint16_t RY;
 };
 
 struct __attribute__((packed)) ControlFrame
@@ -68,8 +68,8 @@ uint8_t computeChecksum(const uint8_t *data, size_t len)
 
 void applyServoOutputs(const ControlPacket &packet)
 {
-    const int center = 128;
-    const int deadband = 3;
+    const int center = 2048;
+    const int deadband = 30;
     static int lastServo1 = 90;
     static int lastServo2 = 90;
     static int lastServo3 = 90;
@@ -91,9 +91,9 @@ void applyServoOutputs(const ControlPacket &packet)
         ry = center;
     }
 
-    int s1 = map(lx, 0, 255, 0, 180);
-    int s2 = map(rx, 0, 255, 0, 180);
-    int s3 = map(ry, 0, 255, 0, 180);
+    int s1 = map(lx, 0, 4095, 0, 180);
+    int s2 = map(rx, 0, 4095, 0, 180);
+    int s3 = map(ry, 0, 4095, 0, 180);
 
     if (abs(s1 - lastServo1) >= 1)
     {
@@ -202,8 +202,8 @@ void setupLoRaWithLibrary()
         changed = true;
     }
 
-    if (cfg.SPED.airDataRate != AIR_DATA_RATE_111_625) {
-        cfg.SPED.airDataRate = AIR_DATA_RATE_111_625;
+    if (cfg.SPED.airDataRate != AIR_DATA_RATE_110_384) {
+        cfg.SPED.airDataRate = AIR_DATA_RATE_110_384;
         changed = true;
     }
 
