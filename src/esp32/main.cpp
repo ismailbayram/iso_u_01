@@ -34,6 +34,7 @@ LoRa_E22 e22(&LoRa, LORA_AUX, LORA_M0, LORA_M1, UART_BPS_RATE_9600);
 
 using radio::ControlPacket;
 using radio::TelemetryPacket;
+using radio::TelemetryRequestPacket;
 
 ControlPacket controlPacket;
 uint16_t packetCounter = 0;
@@ -54,6 +55,13 @@ TelemetryPacket lastTelemetry;
 
 const unsigned long DEBUG_PRINT_INTERVAL_MS = 20;
 const unsigned long SEND_INTERVAL_MS = 20;
+const unsigned long TELEMETRY_REQUEST_INTERVAL_MS = 1000;
+const unsigned long TELEMETRY_RX_GUARD_MS = 250;
+unsigned long lastTelemetryRequestTime = 0;
+unsigned long telemetryGuardUntil = 0;
+uint8_t telemetryReqSeq = 0;
+uint32_t telemetryReqSentCount = 0;
+uint32_t telemetryRxCount = 0;
 
 void sendFrame(uint8_t packetType, const void *payload, uint8_t payloadLength)
 {
@@ -91,7 +99,7 @@ bool parseIncomingLoRaByte(uint8_t b)
   case 3:
     rxPayloadLength = b;
     rxPayloadIndex = 0;
-    if (rxPayloadLength == 0 || rxPayloadLength > sizeof(rxPayloadBuffer))
+    if (rxPayloadLength > sizeof(rxPayloadBuffer))
     {
       rxParserState = 0;
     }
@@ -114,6 +122,7 @@ bool parseIncomingLoRaByte(uint8_t b)
     if (expected == b && rxPacketType == radio::PACKET_TYPE_TELEMETRY && rxPayloadLength == sizeof(TelemetryPacket))
     {
       memcpy(&lastTelemetry, rxPayloadBuffer, sizeof(TelemetryPacket));
+      telemetryRxCount++;
       return true;
     }
     break;
@@ -312,8 +321,24 @@ void loop()
     }
   }
 
+  if (millis() - lastTelemetryRequestTime >= TELEMETRY_REQUEST_INTERVAL_MS)
+  {
+    TelemetryRequestPacket req;
+    req.sequence = telemetryReqSeq++;
+    sendFrame(radio::PACKET_TYPE_TELEMETRY_REQ, &req, sizeof(TelemetryRequestPacket));
+    telemetryReqSentCount++;
+    lastTelemetryRequestTime = millis();
+    telemetryGuardUntil = millis() + TELEMETRY_RX_GUARD_MS;
+  }
+
   if (millis() - lastSendTime >= SEND_INTERVAL_MS)
   {
+    if (millis() < telemetryGuardUntil)
+    {
+      lastSendTime = millis();
+      return;
+    }
+
     lastSendTime = millis();
 
     int rawLX = analogRead(PIN_JOY_L_X);

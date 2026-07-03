@@ -9,7 +9,12 @@ constexpr uint8_t PREAMBLE_2 = 0x55;
 
 enum PacketType : uint8_t {
   PACKET_TYPE_CONTROL = 1,
-  PACKET_TYPE_TELEMETRY = 2
+  PACKET_TYPE_TELEMETRY = 2,
+  PACKET_TYPE_TELEMETRY_REQ = 3
+};
+
+struct __attribute__((packed)) TelemetryRequestPacket {
+  uint8_t sequence;
 };
 
 struct __attribute__((packed)) ControlPacket {

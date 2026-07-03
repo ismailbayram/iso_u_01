@@ -23,18 +23,20 @@ const int MAX_THROTTLE = 1940;
 
 using radio::ControlPacket;
 using radio::TelemetryPacket;
+using radio::TelemetryRequestPacket;
 
 ControlPacket receivedPacket;
 unsigned long lastTelemetryTime = 0;
 unsigned long lastPacketTime = 0;
 
 const unsigned long RX_TIMEOUT_MS = 300;
-const unsigned long TELEMETRY_INTERVAL_MS = 200;
 uint8_t payloadBuffer[64];
 uint8_t payloadIndex = 0;
 uint8_t parserState = 0;
 uint8_t incomingPacketType = 0;
 uint8_t incomingPayloadLength = 0;
+bool telemetryRequested = false;
+uint8_t lastTelemetryReqSeq = 0;
 
 void sendFrame(uint8_t packetType, const void *payload, uint8_t payloadLength);
 
@@ -156,6 +158,13 @@ bool parseIncomingByte(uint8_t b)
             memcpy(&receivedPacket, payloadBuffer, sizeof(ControlPacket));
             return true;
         }
+        if (checksum == b && incomingPacketType == radio::PACKET_TYPE_TELEMETRY_REQ && incomingPayloadLength == sizeof(TelemetryRequestPacket))
+        {
+            TelemetryRequestPacket req;
+            memcpy(&req, payloadBuffer, sizeof(TelemetryRequestPacket));
+            lastTelemetryReqSeq = req.sequence;
+            telemetryRequested = true;
+        }
         break;
     }
     default:
@@ -183,12 +192,14 @@ void sendFrame(uint8_t packetType, const void *payload, uint8_t payloadLength)
 
 void setupLoRaWithLibrary()
 {
-    if (!e22.begin()) {
+    if (!e22.begin())
+    {
         return;
     }
 
     ResponseStructContainer c = e22.getConfiguration();
-    if (c.status.code != E22_SUCCESS) {
+    if (c.status.code != E22_SUCCESS)
+    {
         c.close();
         return;
     }
@@ -198,22 +209,26 @@ void setupLoRaWithLibrary()
 
     bool changed = false;
 
-    if (cfg.SPED.uartBaudRate != UART_BPS_9600) {
+    if (cfg.SPED.uartBaudRate != UART_BPS_9600)
+    {
         cfg.SPED.uartBaudRate = UART_BPS_9600;
         changed = true;
     }
 
-    if (cfg.SPED.airDataRate != AIR_DATA_RATE_110_384) {
+    if (cfg.SPED.airDataRate != AIR_DATA_RATE_110_384)
+    {
         cfg.SPED.airDataRate = AIR_DATA_RATE_110_384;
         changed = true;
     }
 
-    if (cfg.TRANSMISSION_MODE.WORTransceiverControl != WOR_RECEIVER) {
+    if (cfg.TRANSMISSION_MODE.WORTransceiverControl != WOR_RECEIVER)
+    {
         cfg.TRANSMISSION_MODE.WORTransceiverControl = WOR_RECEIVER;
         changed = true;
     }
 
-    if (changed) {
+    if (changed)
+    {
         e22.setConfiguration(cfg, WRITE_CFG_PWR_DWN_SAVE);
     }
 
@@ -253,22 +268,18 @@ void setup()
 
 void loop()
 {
-    while (Serial1.available())
+    uint8_t bytesProcessed = 0;
+    while (Serial1.available() && bytesProcessed < 32)
     {
         if (parseIncomingByte((uint8_t)Serial1.read()))
         {
             lastPacketTime = millis();
             applyServoOutputs(receivedPacket);
-            digitalWrite(PIN_LED, !digitalRead(PIN_LED));
         }
+        bytesProcessed++;
     }
 
-    if (millis() - lastPacketTime > RX_TIMEOUT_MS)
-    {
-        applyFailsafe();
-    }
-
-    if (millis() - lastTelemetryTime > TELEMETRY_INTERVAL_MS)
+    if (telemetryRequested)
     {
         if (digitalRead(LORA_AUX) == HIGH)
         {
@@ -279,11 +290,20 @@ void loop()
             telemetry.mpuAz = 0;
             telemetry.gpsLatE7 = 0;
             telemetry.gpsLonE7 = 0;
-            telemetry.gpsFix = 0;
-            telemetry.gpsSats = 0;
+            telemetry.gpsFix = 1;
+            telemetry.gpsSats = lastTelemetryReqSeq;
 
             sendFrame(radio::PACKET_TYPE_TELEMETRY, &telemetry, sizeof(TelemetryPacket));
+            delayMicroseconds(2500);
+            sendFrame(radio::PACKET_TYPE_TELEMETRY, &telemetry, sizeof(TelemetryPacket));
+
+            telemetryRequested = false;
             lastTelemetryTime = millis();
         }
+    }
+
+    if (millis() - lastPacketTime > RX_TIMEOUT_MS)
+    {
+        applyFailsafe();
     }
 }
