@@ -50,11 +50,6 @@ ControlPacket controlPacket;
 uint16_t packetCounter = 0;
 unsigned long lastSendTime = 0;
 unsigned long lastDebugTime = 0;
-unsigned long bootTime = 0;
-unsigned long lastCfgEchoTime = 0;
-bool cfgWasWritten = false;
-uint8_t cfgReg0Applied = 0xFF;
-uint8_t cfgReg3Applied = 0xFF;
 
 const uint8_t FRAME_PREAMBLE_1 = 0xAA;
 const uint8_t FRAME_PREAMBLE_2 = 0x55;
@@ -171,191 +166,6 @@ void normalizeInputs(int *LX, int *LY, int *RX, int *RY)
   *RY = constrain(*RY, 0, 32767);
 }
 
-void configureLoRa()
-{
-  const uint8_t READ_CMD_9[] = {0xC1, 0x00, 0x09};
-  const uint8_t READ_CMD_6[] = {0xC1, 0x00, 0x06};
-  const uint8_t WRITE_CMD_PREFIX[] = {0xC0, 0x00, 0x09};
-  const uint8_t WRITE_CMD_PREFIX_6[] = {0xC0, 0x00, 0x06};
-  const uint8_t LEGACY_READ_CMD[] = {0xC1, 0xC1, 0xC1};
-  const uint8_t REG0_INDEX = 3;
-  const uint8_t UART_115200_BITS = (0x07 << 3);
-  const uint8_t AIR_RATE_BITS = 0x07;
-  const uint8_t LEGACY_AIR_RATE_MASK = 0x07;
-
-  LoRa.begin(9600, SERIAL_8N1, PIN_RX2, PIN_TX2);
-  Serial.println("[CFG] LoRa modül yapılandırması...");
-
-  digitalWrite(LORA_M0, HIGH);
-  digitalWrite(LORA_M1, HIGH);
-  delay(50);
-
-  unsigned long start = millis();
-  while (digitalRead(LORA_AUX) == LOW)
-  {
-    if (millis() - start > 500)
-    {
-      Serial.println("[CFG] HATA: Modul yanit vermiyor");
-      digitalWrite(LORA_M0, LOW);
-      digitalWrite(LORA_M1, LOW);
-      return;
-    }
-  }
-  delay(10);
-
-  uint8_t raw[16];
-  size_t rawLen = 0;
-  while (LoRa.available()) { LoRa.read(); }
-  LoRa.write(READ_CMD_9, sizeof(READ_CMD_9));
-  LoRa.flush();
-  unsigned long waitStart = millis();
-  while ((millis() - waitStart) < 300) {
-    while (LoRa.available() && rawLen < sizeof(raw)) {
-      raw[rawLen++] = (uint8_t)LoRa.read();
-    }
-    if (rawLen >= 12) {
-      break;
-    }
-  }
-
-  if (rawLen < 9) {
-    rawLen = 0;
-    while (LoRa.available()) { LoRa.read(); }
-    LoRa.write(READ_CMD_6, sizeof(READ_CMD_6));
-    LoRa.flush();
-    waitStart = millis();
-    while ((millis() - waitStart) < 300) {
-      while (LoRa.available() && rawLen < sizeof(raw)) {
-        raw[rawLen++] = (uint8_t)LoRa.read();
-      }
-      if (rawLen >= 9) {
-        break;
-      }
-    }
-  }
-
-  if (rawLen < 6) {
-    rawLen = 0;
-    while (LoRa.available()) { LoRa.read(); }
-    LoRa.write(LEGACY_READ_CMD, sizeof(LEGACY_READ_CMD));
-    LoRa.flush();
-    waitStart = millis();
-    while ((millis() - waitStart) < 300) {
-      while (LoRa.available() && rawLen < sizeof(raw)) {
-        raw[rawLen++] = (uint8_t)LoRa.read();
-      }
-      if (rawLen >= 6) {
-        break;
-      }
-    }
-  }
-
-  uint8_t regs[9];
-  bool parse9 = false;
-  bool parse6 = false;
-  if (rawLen >= 12 && raw[0] == 0xC1 && raw[1] == 0x00 && raw[2] == 0x09)
-  {
-    memcpy(regs, &raw[3], 9);
-    parse9 = true;
-  }
-  else if (rawLen >= 9 && raw[0] == 0xC1 && raw[1] == 0x00 && raw[2] == 0x06)
-  {
-    parse6 = true;
-  }
-  else if (rawLen >= 6)
-  {
-    parse6 = true;
-  }
-
-  if (!parse9 && !parse6)
-  {
-    Serial.print("[CFG] HATA: Config okunamadi, gelen byte: ");
-    Serial.println((int)rawLen);
-    digitalWrite(LORA_M0, LOW);
-    digitalWrite(LORA_M1, LOW);
-    return;
-  }
-
-  if (parse9)
-  {
-    Serial.print("[CFG] Mevcut regs: ");
-    for (int i = 0; i < 9; i++)
-    {
-      if (regs[i] < 0x10)
-      {
-        Serial.print('0');
-      }
-      Serial.print(regs[i], HEX);
-      Serial.print(" ");
-    }
-    Serial.println();
-  }
-
-  uint8_t targetReg0 = 0;
-  if (parse9)
-  {
-    targetReg0 = (regs[REG0_INDEX] & 0xC0) | UART_115200_BITS | AIR_RATE_BITS;
-    bool needsWrite = (regs[REG0_INDEX] != targetReg0);
-    cfgWasWritten = false;
-    if (needsWrite)
-    {
-      regs[REG0_INDEX] = targetReg0;
-
-      uint8_t wcmd[12];
-      memcpy(wcmd, WRITE_CMD_PREFIX, sizeof(WRITE_CMD_PREFIX));
-      memcpy(&wcmd[3], regs, sizeof(regs));
-      LoRa.write(wcmd, sizeof(wcmd));
-      LoRa.flush();
-      delay(120);
-      cfgWasWritten = true;
-      Serial.println("[CFG] 9-byte profil guncellendi");
-    }
-    else
-    {
-      Serial.println("[CFG] 9-byte profil zaten dogru");
-    }
-  }
-  else
-  {
-    uint8_t legacy[6];
-    memcpy(legacy, &raw[rawLen - 6], 6);
-    targetReg0 = (uint8_t)((legacy[2] & 0xF8) | LEGACY_AIR_RATE_MASK);
-    bool needsWrite = (legacy[2] != targetReg0);
-    cfgWasWritten = false;
-    if (needsWrite)
-    {
-      legacy[2] = targetReg0;
-      uint8_t wcmd[] = {WRITE_CMD_PREFIX_6[0], WRITE_CMD_PREFIX_6[1], WRITE_CMD_PREFIX_6[2], legacy[0], legacy[1], legacy[2], legacy[3], legacy[4], legacy[5]};
-      LoRa.write(wcmd, sizeof(wcmd));
-      LoRa.flush();
-      delay(120);
-      cfgWasWritten = true;
-      Serial.println("[CFG] 6-byte profil guncellendi (yalniz air-rate)");
-    }
-    else
-    {
-      Serial.println("[CFG] 6-byte profil zaten dogru");
-    }
-  }
-
-  cfgReg0Applied = targetReg0;
-  cfgReg3Applied = 0;
-
-  while (LoRa.available())
-  {
-    LoRa.read();
-  }
-
-  digitalWrite(LORA_M0, LOW);
-  digitalWrite(LORA_M1, LOW);
-  delay(200);
-
-  LoRa.end();
-  LoRa.begin(115200, SERIAL_8N1, PIN_RX2, PIN_TX2);
-
-  Serial.println("[CFG] Tamam: 115200 UART, hizli air-rate");
-}
-
 void setup()
 {
   pinMode(PIN_BUZZER, OUTPUT);
@@ -374,12 +184,10 @@ void setup()
   delay(200);
 
   Serial.begin(115200);
-  configureLoRa();
+  LoRa.begin(9600, SERIAL_8N1, PIN_RX2, PIN_TX2);
   playWelcomeTone();
   delay(1000);
   setupDisplay();
-  bootTime = millis();
-  Serial.println("[BOOT] Setup tamamlandi");
 
   // TODO: setup three way commnication between STM32
 
@@ -429,20 +237,5 @@ void loop()
       Serial.print("Gonderilen ID: ");
       Serial.println(controlPacket.packetID);
     }
-  }
-
-  if ((millis() - bootTime) < 12000 && (millis() - lastCfgEchoTime) >= 2000)
-  {
-    lastCfgEchoTime = millis();
-    Serial.print("[CFG SNAP] REG0=0x");
-    if (cfgReg0Applied < 0x10)
-      Serial.print('0');
-    Serial.print(cfgReg0Applied, HEX);
-    Serial.print(" REG3=0x");
-    if (cfgReg3Applied < 0x10)
-      Serial.print('0');
-    Serial.print(cfgReg3Applied, HEX);
-    Serial.print(" write=");
-    Serial.println(cfgWasWritten ? "yes" : "no");
   }
 }
