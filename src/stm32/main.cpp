@@ -4,13 +4,13 @@
 #include "radio_protocol.h"
 
 Servo myESC;
-Servo servo1;
-Servo servo2;
-Servo servo3;
+Servo servoAIL;
+Servo servoELE;
+Servo servoRUD;
 #define PIN_ESC PA0
-#define PIN_SERVO1 PA6
-#define PIN_SERVO2 PA7
-#define PIN_SERVO3 PB0
+#define PIN_SERVO_AIL PA6
+#define PIN_SERVO_ELE PA7
+#define PIN_SERVO_RUD PB0
 #define PIN_LED PC13
 
 #define LORA_M0 PA1
@@ -45,9 +45,9 @@ void applyServoOutputs(const ControlPacket &packet)
     const int center = 2048;
     const int deadband = 45;
     const float filterAlpha = 0.35f;
-    static int lastServo1 = 90;
-    static int lastServo2 = 90;
-    static int lastServo3 = 90;
+    static int lastServoAIL = 90;
+    static int lastServoELE = 90;
+    static int lastServoRUD = 90;
     static float filteredLX = 2048.0f;
     static float filteredRX = 2048.0f;
     static float filteredRY = 2048.0f;
@@ -77,29 +77,29 @@ void applyServoOutputs(const ControlPacket &packet)
     int s2 = map(rx, 0, 4095, 0, 180);
     int s3 = map(ry, 0, 4095, 0, 180);
 
-    if (abs(s1 - lastServo1) >= 2)
+    if (abs(s1 - lastServoAIL) >= 2)
     {
-        servo1.write(s1);
-        lastServo1 = s1;
+        servoAIL.write(s1);
+        lastServoAIL = s1;
     }
-    if (abs(s2 - lastServo2) >= 2)
+    if (abs(s2 - lastServoELE) >= 2)
     {
-        servo2.write(s2);
-        lastServo2 = s2;
+        servoELE.write(s2);
+        lastServoELE = s2;
     }
-    if (abs(s3 - lastServo3) >= 2)
+    if (abs(s3 - lastServoRUD) >= 2)
     {
-        servo3.write(s3);
-        lastServo3 = s3;
+        servoRUD.write(s3);
+        lastServoRUD = s3;
     }
 }
 
 void applyFailsafe()
 {
     myESC.writeMicroseconds(MIN_THROTTLE);
-    servo1.write(90);
-    servo2.write(90);
-    servo3.write(90);
+    servoAIL.write(90);
+    servoELE.write(90);
+    servoRUD.write(90);
 }
 
 bool parseIncomingByte(uint8_t b)
@@ -250,16 +250,16 @@ void setup()
     myESC.attach(PIN_ESC, MIN_THROTTLE, MAX_THROTTLE);
     myESC.writeMicroseconds(MIN_THROTTLE);
 
-    servo1.attach(PIN_SERVO1);
-    servo2.attach(PIN_SERVO2);
-    servo3.attach(PIN_SERVO3);
-    pinMode(PIN_SERVO1, OUTPUT_OPEN_DRAIN);
-    pinMode(PIN_SERVO2, OUTPUT_OPEN_DRAIN);
-    pinMode(PIN_SERVO3, OUTPUT_OPEN_DRAIN);
+    servoAIL.attach(PIN_SERVO_AIL);
+    servoELE.attach(PIN_SERVO_ELE);
+    servoRUD.attach(PIN_SERVO_RUD);
+    pinMode(PIN_SERVO_AIL, OUTPUT_OPEN_DRAIN);
+    pinMode(PIN_SERVO_ELE, OUTPUT_OPEN_DRAIN);
+    pinMode(PIN_SERVO_RUD, OUTPUT_OPEN_DRAIN);
 
-    servo1.write(90);
-    servo2.write(90);
-    servo3.write(90);
+    servoAIL.write(90);
+    servoELE.write(90);
+    servoRUD.write(90);
 
     setupLoRaWithLibrary();
 
