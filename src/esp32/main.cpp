@@ -309,6 +309,26 @@ void loop()
         lastTelemetryPrintTime = millis();
         Serial.print("[TEL] V=");
         Serial.print(lastTelemetry.voltageMv / 1000.0f, 2);
+        Serial.print(" Tbatt=");
+        if (lastTelemetry.battTempCentiC == INT16_MIN)
+        {
+          Serial.print("NA");
+        }
+        else
+        {
+          Serial.print(lastTelemetry.battTempCentiC / 100.0f, 1);
+          Serial.print("C");
+        }
+        Serial.print(" Tesc=");
+        if (lastTelemetry.escTempCentiC == INT16_MIN)
+        {
+          Serial.print("NA");
+        }
+        else
+        {
+          Serial.print(lastTelemetry.escTempCentiC / 100.0f, 1);
+          Serial.print("C");
+        }
         Serial.print("V GPSfix=");
         Serial.print(lastTelemetry.gpsFix);
         Serial.print(" sats=");

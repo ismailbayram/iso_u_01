@@ -1,5 +1,7 @@
 #include <Arduino.h>
+#include <DallasTemperature.h>
 #include <LoRa_E22.h>
+#include <OneWire.h>
 #include <Servo.h>
 #include "radio_protocol.h"
 
@@ -12,6 +14,8 @@ Servo servoRUD;
 #define PIN_SERVO_ELE PA7
 #define PIN_SERVO_RUD PB0
 #define PIN_LED PC13
+#define PIN_DS18_BATT PA8
+#define PIN_DS18_ESC PB1
 
 #define LORA_M0 PA1
 #define LORA_M1 PA2
@@ -37,6 +41,16 @@ uint8_t incomingPacketType = 0;
 uint8_t incomingPayloadLength = 0;
 bool telemetryRequested = false;
 uint8_t lastTelemetryReqSeq = 0;
+
+OneWire oneWireBatt(PIN_DS18_BATT);
+DallasTemperature ds18Batt(&oneWireBatt);
+OneWire oneWireEsc(PIN_DS18_ESC);
+DallasTemperature ds18Esc(&oneWireEsc);
+
+unsigned long lastTempRequestMs = 0;
+const unsigned long TEMP_CONVERSION_INTERVAL_MS = 300;
+int16_t battTempCentiC = INT16_MIN;
+int16_t escTempCentiC = INT16_MIN;
 
 void sendFrame(uint8_t packetType, const void *payload, uint8_t payloadLength);
 
@@ -179,6 +193,25 @@ float getBatteryVoltage()
     return 12.4;
 }
 
+void updateDs18Temperatures()
+{
+    if (millis() - lastTempRequestMs < TEMP_CONVERSION_INTERVAL_MS)
+    {
+        return;
+    }
+
+    lastTempRequestMs = millis();
+
+    float battC = ds18Batt.getTempCByIndex(0);
+    float escC = ds18Esc.getTempCByIndex(0);
+
+    battTempCentiC = (battC == DEVICE_DISCONNECTED_C) ? INT16_MIN : (int16_t)(battC * 100.0f);
+    escTempCentiC = (escC == DEVICE_DISCONNECTED_C) ? INT16_MIN : (int16_t)(escC * 100.0f);
+
+    ds18Batt.requestTemperatures();
+    ds18Esc.requestTemperatures();
+}
+
 void sendFrame(uint8_t packetType, const void *payload, uint8_t payloadLength)
 {
     const uint8_t *payloadBytes = (const uint8_t *)payload;
@@ -261,6 +294,16 @@ void setup()
     servoELE.write(90);
     servoRUD.write(90);
 
+    ds18Batt.begin();
+    ds18Esc.begin();
+    ds18Batt.setWaitForConversion(false);
+    ds18Esc.setWaitForConversion(false);
+    ds18Batt.setResolution(10);
+    ds18Esc.setResolution(10);
+    ds18Batt.requestTemperatures();
+    ds18Esc.requestTemperatures();
+    lastTempRequestMs = millis();
+
     setupLoRaWithLibrary();
 
     lastPacketTime = millis();
@@ -268,6 +311,8 @@ void setup()
 
 void loop()
 {
+    updateDs18Temperatures();
+
     uint8_t bytesProcessed = 0;
     while (Serial1.available() && bytesProcessed < 32)
     {
@@ -285,6 +330,8 @@ void loop()
         {
             TelemetryPacket telemetry;
             telemetry.voltageMv = (uint16_t)(getBatteryVoltage() * 1000.0f);
+            telemetry.battTempCentiC = battTempCentiC;
+            telemetry.escTempCentiC = escTempCentiC;
             telemetry.mpuAx = 0;
             telemetry.mpuAy = 0;
             telemetry.mpuAz = 0;

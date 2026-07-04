@@ -27,6 +27,8 @@ struct __attribute__((packed)) ControlPacket {
 
 struct __attribute__((packed)) TelemetryPacket {
   uint16_t voltageMv;
+  int16_t battTempCentiC;
+  int16_t escTempCentiC;
   int16_t mpuAx;
   int16_t mpuAy;
   int16_t mpuAz;
