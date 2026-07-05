@@ -18,9 +18,9 @@ Servo servoRUD;
 #define PIN_DS18_ESC PB1
 #define PIN_VBAT_SENSE PA4
 
-#define LORA_M0 PA1
-#define LORA_M1 PA2
-#define LORA_AUX PA3
+#define LORA_M0 PA12
+#define LORA_M1 PA15
+#define LORA_AUX PA11
 LoRa_E22 e22(&Serial1, LORA_AUX, LORA_M0, LORA_M1, UART_BPS_RATE_9600);
 
 const int MIN_THROTTLE = 1100;
@@ -322,6 +322,9 @@ void setup()
     ds18Batt.requestTemperatures();
     ds18Esc.requestTemperatures();
     lastTempRequestMs = millis();
+
+    Serial1.setTx(PA9);
+    Serial1.setRx(PA10);
 
     setupLoRaWithLibrary();
 
