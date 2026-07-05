@@ -14,8 +14,9 @@ Servo servoRUD;
 #define PIN_SERVO_ELE PA7
 #define PIN_SERVO_RUD PB0
 #define PIN_LED PC13
-#define PIN_DS18_BATT PA8
+#define PIN_DS18_BATT PA5
 #define PIN_DS18_ESC PB1
+#define PIN_VBAT_SENSE PA4
 
 #define LORA_M0 PA1
 #define LORA_M1 PA2
@@ -24,6 +25,10 @@ LoRa_E22 e22(&Serial1, LORA_AUX, LORA_M0, LORA_M1, UART_BPS_RATE_9600);
 
 const int MIN_THROTTLE = 1100;
 const int MAX_THROTTLE = 1940;
+const float VBAT_DIVIDER_R_TOP = 100000.0f;
+const float VBAT_DIVIDER_R_BOTTOM = 20000.0f;
+const float ADC_REF_V = 3.3f;
+const float ADC_MAX_COUNTS = 4095.0f;
 
 using radio::ControlPacket;
 using radio::TelemetryPacket;
@@ -54,7 +59,7 @@ int16_t escTempCentiC = INT16_MIN;
 
 void sendFrame(uint8_t packetType, const void *payload, uint8_t payloadLength);
 
-void applyServoOutputs(const ControlPacket &packet)
+void applyOutputs(const ControlPacket &packet)
 {
     const int center = 2048;
     const int deadband = 45;
@@ -63,14 +68,17 @@ void applyServoOutputs(const ControlPacket &packet)
     static int lastServoELE = 90;
     static int lastServoRUD = 90;
     static float filteredLX = 2048.0f;
+    static float filteredLY = 0.0f;
     static float filteredRX = 2048.0f;
     static float filteredRY = 2048.0f;
 
     filteredLX = filteredLX + filterAlpha * ((float)packet.LX - filteredLX);
+    filteredLY = filteredLY + filterAlpha * ((float)packet.LY - filteredLY);
     filteredRX = filteredRX + filterAlpha * ((float)packet.RX - filteredRX);
     filteredRY = filteredRY + filterAlpha * ((float)packet.RY - filteredRY);
 
     int lx = (int)filteredLX;
+    int ly = (int)filteredLY;
     int rx = (int)filteredRX;
     int ry = (int)filteredRY;
 
@@ -90,6 +98,9 @@ void applyServoOutputs(const ControlPacket &packet)
     int s1 = map(lx, 0, 4095, 0, 180);
     int s2 = map(rx, 0, 4095, 0, 180);
     int s3 = map(ry, 0, 4095, 0, 180);
+    int escUs = map(constrain(ly, 0, 4095), 0, 4095, MIN_THROTTLE, MAX_THROTTLE);
+
+    myESC.writeMicroseconds(escUs);
 
     if (abs(s1 - lastServoAIL) >= 2)
     {
@@ -190,7 +201,14 @@ bool parseIncomingByte(uint8_t b)
 
 float getBatteryVoltage()
 {
-    return 12.4;
+    uint32_t sum = 0;
+    for (int i = 0; i < 8; i++)
+    {
+        sum += analogRead(PIN_VBAT_SENSE);
+    }
+    float adcCounts = (float)sum / 8.0f;
+    float vSense = (adcCounts / ADC_MAX_COUNTS) * ADC_REF_V;
+    return vSense * ((VBAT_DIVIDER_R_TOP + VBAT_DIVIDER_R_BOTTOM) / VBAT_DIVIDER_R_BOTTOM);
 }
 
 void updateDs18Temperatures()
@@ -272,6 +290,7 @@ void setup()
 {
     pinMode(PIN_LED, OUTPUT);
     pinMode(PIN_ESC, OUTPUT_OPEN_DRAIN);
+    pinMode(PIN_VBAT_SENSE, INPUT_ANALOG);
     pinMode(LORA_M0, OUTPUT);
     pinMode(LORA_M1, OUTPUT);
     pinMode(LORA_AUX, INPUT);
@@ -319,7 +338,7 @@ void loop()
         if (parseIncomingByte((uint8_t)Serial1.read()))
         {
             lastPacketTime = millis();
-            applyServoOutputs(receivedPacket);
+            applyOutputs(receivedPacket);
         }
         bytesProcessed++;
     }
