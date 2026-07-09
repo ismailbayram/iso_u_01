@@ -9,7 +9,7 @@ Servo myESC;
 Servo servoAIL;
 Servo servoELE;
 Servo servoRUD;
-#define PIN_ESC PA0
+#define PIN_ESC PA1
 #define PIN_SERVO_AIL PA6
 #define PIN_SERVO_ELE PA7
 #define PIN_SERVO_RUD PB0
