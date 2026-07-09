@@ -45,9 +45,6 @@ unsigned long lastBootEchoTime = 0;
 bool loraSetupDone = false;
 bool loraSetupChanged = false;
 unsigned long lastTelemetryPrintTime = 0;
-unsigned long lastDiagTime = 0;
-uint32_t loraByteCount = 0;
-uint32_t loraFrameOkCount = 0;
 
 uint8_t rxPacketType = 0;
 uint8_t rxPayloadLength = 0;
@@ -65,6 +62,12 @@ unsigned long telemetryGuardUntil = 0;
 uint8_t telemetryReqSeq = 0;
 uint32_t telemetryReqSentCount = 0;
 uint32_t telemetryRxCount = 0;
+
+const uint8_t MIN_SATS_REQUIRED = 4;
+const unsigned long GPS_DISPLAY_INTERVAL_MS = 500;
+const unsigned long LOW_SAT_BEEP_INTERVAL_MS = 2000;
+unsigned long lastGpsDisplayTime = 0;
+unsigned long lastLowSatBeepTime = 0;
 
 void sendFrame(uint8_t packetType, const void *payload, uint8_t payloadLength)
 {
@@ -236,6 +239,40 @@ void setupDisplay()
   }
 }
 
+void updateGpsStatusDisplay()
+{
+  if (millis() - lastGpsDisplayTime < GPS_DISPLAY_INTERVAL_MS)
+  {
+    return;
+  }
+  lastGpsDisplayTime = millis();
+
+  bool lowSats = lastTelemetry.gpsSats < MIN_SATS_REQUIRED;
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.print("Uydu: ");
+  display.println(lastTelemetry.gpsSats);
+  if (lowSats)
+  {
+    display.println("YETERLI UYDU");
+    display.println("SAYISINA ULASILAMADI");
+  }
+  else
+  {
+    display.println("GPS OK");
+  }
+  display.display();
+
+  if (lowSats && millis() - lastLowSatBeepTime >= LOW_SAT_BEEP_INTERVAL_MS)
+  {
+    lastLowSatBeepTime = millis();
+    tone(PIN_BUZZER, 330, 150);
+  }
+}
+
 static float filteredLX = 2048;
 static float filteredLY = 2048;
 static float filteredRX = 2048;
@@ -307,10 +344,8 @@ void loop()
 {
   while (LoRa.available())
   {
-    loraByteCount++;
     if (parseIncomingLoRaByte((uint8_t)LoRa.read()))
     {
-      loraFrameOkCount++;
       if (millis() - lastTelemetryPrintTime > 200)
       {
         lastTelemetryPrintTime = millis();
@@ -350,36 +385,19 @@ void loop()
         Serial.print(lastTelemetry.mpuGz);
         Serial.print(" hdg=");
         Serial.print(lastTelemetry.compassHeading / 10.0f, 1);
-        Serial.print(" sensors[ADXL=");
-        Serial.print((lastTelemetry.sensorStatus & radio::SENSOR_STATUS_ADXL345) ? "OK" : "NA");
-        Serial.print(" ITG=");
-        Serial.print((lastTelemetry.sensorStatus & radio::SENSOR_STATUS_ITG3205) ? "OK" : "NA");
-        Serial.print(" QMC=");
-        Serial.print((lastTelemetry.sensorStatus & radio::SENSOR_STATUS_QMC5883L) ? "OK" : "NA");
-        Serial.print(" DSbatt=");
-        Serial.print((lastTelemetry.sensorStatus & radio::SENSOR_STATUS_DS18_BATT) ? "OK" : "NA");
-        Serial.print(" DSesc=");
-        Serial.print((lastTelemetry.sensorStatus & radio::SENSOR_STATUS_DS18_ESC) ? "OK" : "NA");
-        Serial.print("] i2cErr[ADXL=");
-        Serial.print(lastTelemetry.i2cErrAdxl);
-        Serial.print(" ITG=");
-        Serial.print(lastTelemetry.i2cErrItg);
-        Serial.print(" QMC=");
-        Serial.print(lastTelemetry.i2cErrQmc);
-        Serial.print("] (0=OK 1=uzun 2=adres_NACK 3=veri_NACK 4=timeout/bus_yok)");
-        Serial.println();
+        Serial.print(" GPSfix=");
+        Serial.print(lastTelemetry.gpsFix);
+        Serial.print(" sats=");
+        Serial.print(lastTelemetry.gpsSats);
+        Serial.print(" lat=");
+        Serial.print(lastTelemetry.gpsLatE7 / 10000000.0, 6);
+        Serial.print(" lon=");
+        Serial.println(lastTelemetry.gpsLonE7 / 10000000.0, 6);
       }
     }
   }
 
-  if (millis() - lastDiagTime > 10000)
-  {
-    lastDiagTime = millis();
-    Serial.print("[DBG] LoRa bytes=");
-    Serial.print(loraByteCount);
-    Serial.print(" frames_ok=");
-    Serial.println(loraFrameOkCount);
-  }
+  updateGpsStatusDisplay();
 
   if (millis() - lastTelemetryRequestTime >= TELEMETRY_REQUEST_INTERVAL_MS)
   {

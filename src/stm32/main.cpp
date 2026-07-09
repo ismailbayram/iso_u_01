@@ -3,6 +3,7 @@
 #include <LoRa_E22.h>
 #include <OneWire.h>
 #include <Servo.h>
+#include <TinyGPSPlus.h>
 #include <Wire.h>
 #include "radio_protocol.h"
 
@@ -76,6 +77,12 @@ int16_t imuGx = 0, imuGy = 0, imuGz = 0;
 int16_t imuHeading = 0;
 unsigned long lastImuReadMs = 0;
 const unsigned long IMU_READ_INTERVAL_MS = 50;
+
+TinyGPSPlus gps;
+int32_t gpsLatE7 = 0;
+int32_t gpsLonE7 = 0;
+uint8_t gpsFix = 0;
+uint8_t gpsSats = 0;
 
 void sendFrame(uint8_t packetType, const void *payload, uint8_t payloadLength);
 
@@ -253,24 +260,18 @@ void updateDs18Temperatures()
 static bool adxlFound = false;
 static bool itgFound = false;
 static bool qmcFound = false;
-static uint8_t i2cErrAdxl = 0;
-static uint8_t i2cErrItg = 0;
-static uint8_t i2cErrQmc = 0;
 
-static uint8_t probeI2C(uint8_t addr)
+static bool probeI2C(uint8_t addr)
 {
     Wire.beginTransmission(addr);
-    return Wire.endTransmission();
+    return Wire.endTransmission() == 0;
 }
 
 void initGy85()
 {
-    i2cErrAdxl = probeI2C(ADXL345_ADDRESS);
-    i2cErrItg = probeI2C(ITG3205_ADDRESS);
-    i2cErrQmc = probeI2C(QMC5883L_ADDRESS);
-    adxlFound = (i2cErrAdxl == 0);
-    itgFound = (i2cErrItg == 0);
-    qmcFound = (i2cErrQmc == 0);
+    adxlFound = probeI2C(ADXL345_ADDRESS);
+    itgFound = probeI2C(ITG3205_ADDRESS);
+    qmcFound = probeI2C(QMC5883L_ADDRESS);
 
     if (adxlFound)
     {
@@ -484,6 +485,10 @@ void setup()
     Serial1.setTx(PA9);
     Serial1.setRx(PA10);
 
+    Serial2.setTx(PIN_GPS_TX);
+    Serial2.setRx(PIN_GPS_RX);
+    Serial2.begin(9600);
+
     setupLoRaWithLibrary();
 
     lastPacketTime = millis();
@@ -504,6 +509,22 @@ void loop()
         bytesProcessed++;
     }
 
+    while (Serial2.available())
+    {
+        gps.encode(Serial2.read());
+    }
+    if (gps.location.isUpdated() && gps.location.isValid())
+    {
+        gpsLatE7 = (int32_t)(gps.location.lat() * 10000000.0);
+        gpsLonE7 = (int32_t)(gps.location.lng() * 10000000.0);
+        gpsFix = 1;
+    }
+    else if (gps.location.age() > 5000)
+    {
+        gpsFix = 0;
+    }
+    gpsSats = gps.satellites.isValid() ? (uint8_t)constrain(gps.satellites.value(), 0, 255) : 0;
+
     if (telemetryRequested)
     {
         if (millis() - lastImuReadMs >= IMU_READ_INTERVAL_MS)
@@ -523,15 +544,10 @@ void loop()
         telemetry.mpuGy = imuGy;
         telemetry.mpuGz = imuGz;
         telemetry.compassHeading = imuHeading;
-        telemetry.sensorStatus =
-            (adxlFound ? radio::SENSOR_STATUS_ADXL345 : 0) |
-            (itgFound ? radio::SENSOR_STATUS_ITG3205 : 0) |
-            (qmcFound ? radio::SENSOR_STATUS_QMC5883L : 0) |
-            (battTempCentiC != INT16_MIN ? radio::SENSOR_STATUS_DS18_BATT : 0) |
-            (escTempCentiC != INT16_MIN ? radio::SENSOR_STATUS_DS18_ESC : 0);
-        telemetry.i2cErrAdxl = i2cErrAdxl;
-        telemetry.i2cErrItg = i2cErrItg;
-        telemetry.i2cErrQmc = i2cErrQmc;
+        telemetry.gpsLatE7 = gpsLatE7;
+        telemetry.gpsLonE7 = gpsLonE7;
+        telemetry.gpsFix = gpsFix;
+        telemetry.gpsSats = gpsSats;
 
         sendFrame(radio::PACKET_TYPE_TELEMETRY, &telemetry, sizeof(TelemetryPacket));
 
