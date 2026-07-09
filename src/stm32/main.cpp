@@ -17,6 +17,8 @@ Servo servoRUD;
 #define PIN_DS18_BATT PA5
 #define PIN_DS18_ESC PB1
 #define PIN_VBAT_SENSE PA4
+#define PIN_GPS_TX PA2
+#define PIN_GPS_RX PA3
 
 #define LORA_M0 PA12
 #define LORA_M1 PA15
