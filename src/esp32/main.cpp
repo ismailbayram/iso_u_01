@@ -323,6 +323,14 @@ void setup()
 
   delay(200);
 
+  // Filtreleri sabit orta noktadan degil, gercek stick pozisyonundan baslat.
+  // Aksi halde ilk paketlerde throttle gercek deger yakinsayana kadar
+  // yanlis (orta seviye) bir gaz komutu gonderilir.
+  filteredLX = analogRead(PIN_JOY_L_X);
+  filteredLY = analogRead(PIN_JOY_L_Y);
+  filteredRX = analogRead(PIN_JOY_R_X);
+  filteredRY = analogRead(PIN_JOY_R_Y);
+
   Serial.begin(115200);
   Serial.println("[FW] esp32-telemetry-parser-v2");
   Serial.print("[DBG] TEL_STRUCT_SIZE=");
