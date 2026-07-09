@@ -97,9 +97,9 @@ void applyOutputs(const ControlPacket &packet)
         ry = center;
     }
 
-    int s1 = map(lx, 0, 4095, 0, 180);
-    int s2 = map(rx, 0, 4095, 0, 180);
-    int s3 = map(ry, 0, 4095, 0, 180);
+    int s1 = map(rx, 0, 4095, 0, 180);
+    int s2 = map(ry, 0, 4095, 0, 180);
+    int s3 = map(lx, 0, 4095, 0, 180);
     int escUs = map(constrain(ly, 0, 4095), 0, 4095, MIN_THROTTLE, MAX_THROTTLE);
 
     myESC.writeMicroseconds(escUs);
