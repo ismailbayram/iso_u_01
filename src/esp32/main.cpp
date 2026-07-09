@@ -45,6 +45,9 @@ unsigned long lastBootEchoTime = 0;
 bool loraSetupDone = false;
 bool loraSetupChanged = false;
 unsigned long lastTelemetryPrintTime = 0;
+unsigned long lastDiagTime = 0;
+uint32_t loraByteCount = 0;
+uint32_t loraFrameOkCount = 0;
 
 uint8_t rxPacketType = 0;
 uint8_t rxPayloadLength = 0;
@@ -285,6 +288,8 @@ void setup()
 
   Serial.begin(115200);
   Serial.println("[FW] esp32-telemetry-parser-v2");
+  Serial.print("[DBG] TEL_STRUCT_SIZE=");
+  Serial.println(sizeof(TelemetryPacket));
   setupLoRaWithLibrary();
   bootTime = millis();
 
@@ -302,8 +307,10 @@ void loop()
 {
   while (LoRa.available())
   {
+    loraByteCount++;
     if (parseIncomingLoRaByte((uint8_t)LoRa.read()))
     {
+      loraFrameOkCount++;
       if (millis() - lastTelemetryPrintTime > 200)
       {
         lastTelemetryPrintTime = millis();
@@ -329,16 +336,49 @@ void loop()
           Serial.print(lastTelemetry.escTempCentiC / 100.0f, 1);
           Serial.print("C");
         }
-        Serial.print("V GPSfix=");
-        Serial.print(lastTelemetry.gpsFix);
-        Serial.print(" sats=");
-        Serial.print(lastTelemetry.gpsSats);
-        Serial.print(" lat=");
-        Serial.print(lastTelemetry.gpsLatE7 / 10000000.0, 6);
-        Serial.print(" lon=");
-        Serial.println(lastTelemetry.gpsLonE7 / 10000000.0, 6);
+        Serial.print(" acc=");
+        Serial.print(lastTelemetry.mpuAx);
+        Serial.print(",");
+        Serial.print(lastTelemetry.mpuAy);
+        Serial.print(",");
+        Serial.print(lastTelemetry.mpuAz);
+        Serial.print(" gyr=");
+        Serial.print(lastTelemetry.mpuGx);
+        Serial.print(",");
+        Serial.print(lastTelemetry.mpuGy);
+        Serial.print(",");
+        Serial.print(lastTelemetry.mpuGz);
+        Serial.print(" hdg=");
+        Serial.print(lastTelemetry.compassHeading / 10.0f, 1);
+        Serial.print(" sensors[ADXL=");
+        Serial.print((lastTelemetry.sensorStatus & radio::SENSOR_STATUS_ADXL345) ? "OK" : "NA");
+        Serial.print(" ITG=");
+        Serial.print((lastTelemetry.sensorStatus & radio::SENSOR_STATUS_ITG3205) ? "OK" : "NA");
+        Serial.print(" QMC=");
+        Serial.print((lastTelemetry.sensorStatus & radio::SENSOR_STATUS_QMC5883L) ? "OK" : "NA");
+        Serial.print(" DSbatt=");
+        Serial.print((lastTelemetry.sensorStatus & radio::SENSOR_STATUS_DS18_BATT) ? "OK" : "NA");
+        Serial.print(" DSesc=");
+        Serial.print((lastTelemetry.sensorStatus & radio::SENSOR_STATUS_DS18_ESC) ? "OK" : "NA");
+        Serial.print("] i2cErr[ADXL=");
+        Serial.print(lastTelemetry.i2cErrAdxl);
+        Serial.print(" ITG=");
+        Serial.print(lastTelemetry.i2cErrItg);
+        Serial.print(" QMC=");
+        Serial.print(lastTelemetry.i2cErrQmc);
+        Serial.print("] (0=OK 1=uzun 2=adres_NACK 3=veri_NACK 4=timeout/bus_yok)");
+        Serial.println();
       }
     }
+  }
+
+  if (millis() - lastDiagTime > 10000)
+  {
+    lastDiagTime = millis();
+    Serial.print("[DBG] LoRa bytes=");
+    Serial.print(loraByteCount);
+    Serial.print(" frames_ok=");
+    Serial.println(loraFrameOkCount);
   }
 
   if (millis() - lastTelemetryRequestTime >= TELEMETRY_REQUEST_INTERVAL_MS)

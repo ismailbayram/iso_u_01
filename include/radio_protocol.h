@@ -13,6 +13,14 @@ enum PacketType : uint8_t {
   PACKET_TYPE_TELEMETRY_REQ = 3
 };
 
+enum SensorStatusBit : uint8_t {
+  SENSOR_STATUS_ADXL345 = 1 << 0,
+  SENSOR_STATUS_ITG3205 = 1 << 1,
+  SENSOR_STATUS_QMC5883L = 1 << 2,
+  SENSOR_STATUS_DS18_BATT = 1 << 3,
+  SENSOR_STATUS_DS18_ESC = 1 << 4
+};
+
 struct __attribute__((packed)) TelemetryRequestPacket {
   uint8_t sequence;
 };
@@ -32,10 +40,14 @@ struct __attribute__((packed)) TelemetryPacket {
   int16_t mpuAx;
   int16_t mpuAy;
   int16_t mpuAz;
-  int32_t gpsLatE7;
-  int32_t gpsLonE7;
-  uint8_t gpsFix;
-  uint8_t gpsSats;
+  int16_t mpuGx;
+  int16_t mpuGy;
+  int16_t mpuGz;
+  int16_t compassHeading;
+  uint8_t sensorStatus;
+  uint8_t i2cErrAdxl;
+  uint8_t i2cErrItg;
+  uint8_t i2cErrQmc;
 };
 
 inline uint8_t computeFrameChecksum(uint8_t packetType, uint8_t payloadLength, const uint8_t *payload) {

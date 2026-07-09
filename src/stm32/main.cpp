@@ -3,7 +3,19 @@
 #include <LoRa_E22.h>
 #include <OneWire.h>
 #include <Servo.h>
+#include <Wire.h>
 #include "radio_protocol.h"
+
+#define ADXL345_ADDRESS 0x53
+#define ADXL345_POWER_CTL 0x2D
+#define ADXL345_DATAX0 0x32
+
+#define ITG3205_ADDRESS 0x68
+#define ITG3205_PWR_MGMT 0x3E
+#define ITG3205_DATA_REG 0x1D
+
+#define QMC5883L_ADDRESS 0x0D
+#define QMC5883L_DATA_REG 0x00
 
 Servo myESC;
 Servo servoAIL;
@@ -58,6 +70,12 @@ unsigned long lastTempRequestMs = 0;
 const unsigned long TEMP_CONVERSION_INTERVAL_MS = 300;
 int16_t battTempCentiC = INT16_MIN;
 int16_t escTempCentiC = INT16_MIN;
+
+int16_t imuAx = 0, imuAy = 0, imuAz = 0;
+int16_t imuGx = 0, imuGy = 0, imuGz = 0;
+int16_t imuHeading = 0;
+unsigned long lastImuReadMs = 0;
+const unsigned long IMU_READ_INTERVAL_MS = 50;
 
 void sendFrame(uint8_t packetType, const void *payload, uint8_t payloadLength);
 
@@ -232,6 +250,130 @@ void updateDs18Temperatures()
     ds18Esc.requestTemperatures();
 }
 
+static bool adxlFound = false;
+static bool itgFound = false;
+static bool qmcFound = false;
+static uint8_t i2cErrAdxl = 0;
+static uint8_t i2cErrItg = 0;
+static uint8_t i2cErrQmc = 0;
+
+static uint8_t probeI2C(uint8_t addr)
+{
+    Wire.beginTransmission(addr);
+    return Wire.endTransmission();
+}
+
+void initGy85()
+{
+    i2cErrAdxl = probeI2C(ADXL345_ADDRESS);
+    i2cErrItg = probeI2C(ITG3205_ADDRESS);
+    i2cErrQmc = probeI2C(QMC5883L_ADDRESS);
+    adxlFound = (i2cErrAdxl == 0);
+    itgFound = (i2cErrItg == 0);
+    qmcFound = (i2cErrQmc == 0);
+
+    if (adxlFound)
+    {
+        Wire.beginTransmission(ADXL345_ADDRESS);
+        Wire.write(ADXL345_POWER_CTL);
+        Wire.write(0x08);
+        Wire.endTransmission();
+    }
+
+    if (itgFound)
+    {
+        Wire.beginTransmission(ITG3205_ADDRESS);
+        Wire.write(0x16);
+        Wire.write(0x18);
+        Wire.endTransmission();
+        Wire.beginTransmission(ITG3205_ADDRESS);
+        Wire.write(ITG3205_PWR_MGMT);
+        Wire.write(0x01);
+        Wire.endTransmission();
+    }
+
+    if (qmcFound)
+    {
+        Wire.beginTransmission(QMC5883L_ADDRESS);
+        Wire.write(0x0B);
+        Wire.write(0x01);
+        Wire.endTransmission();
+        Wire.beginTransmission(QMC5883L_ADDRESS);
+        Wire.write(0x20);
+        Wire.write(0x40);
+        Wire.endTransmission();
+        Wire.beginTransmission(QMC5883L_ADDRESS);
+        Wire.write(0x21);
+        Wire.write(0x01);
+        Wire.endTransmission();
+        Wire.beginTransmission(QMC5883L_ADDRESS);
+        Wire.write(0x09);
+        Wire.write(0x01);
+        Wire.endTransmission();
+    }
+}
+
+void readGy85(int16_t &ax, int16_t &ay, int16_t &az,
+              int16_t &gx, int16_t &gy, int16_t &gz,
+              int16_t &heading)
+{
+    if (adxlFound)
+    {
+        Wire.beginTransmission(ADXL345_ADDRESS);
+        Wire.write(ADXL345_DATAX0);
+        Wire.endTransmission(false);
+        Wire.requestFrom(ADXL345_ADDRESS, 6);
+        if (Wire.available() >= 6)
+        {
+            uint8_t xLo = Wire.read(), xHi = Wire.read();
+            uint8_t yLo = Wire.read(), yHi = Wire.read();
+            uint8_t zLo = Wire.read(), zHi = Wire.read();
+            ax = (int16_t)(xLo | (xHi << 8)) / 4;
+            ay = (int16_t)(yLo | (yHi << 8)) / 4;
+            az = (int16_t)(zLo | (zHi << 8)) / 4;
+        }
+        Wire.endTransmission(true);
+    }
+
+    if (itgFound)
+    {
+        Wire.beginTransmission(ITG3205_ADDRESS);
+        Wire.write(ITG3205_DATA_REG);
+        Wire.endTransmission(false);
+        Wire.requestFrom(ITG3205_ADDRESS, 6);
+        if (Wire.available() >= 6)
+        {
+            uint8_t xHi = Wire.read(), xLo = Wire.read();
+            uint8_t yHi = Wire.read(), yLo = Wire.read();
+            uint8_t zHi = Wire.read(), zLo = Wire.read();
+            gx = (int16_t)((xHi << 8) | xLo);
+            gy = (int16_t)((yHi << 8) | yLo);
+            gz = (int16_t)((zHi << 8) | zLo);
+        }
+        Wire.endTransmission(true);
+    }
+
+    if (qmcFound)
+    {
+        Wire.beginTransmission(QMC5883L_ADDRESS);
+        Wire.write(QMC5883L_DATA_REG);
+        Wire.endTransmission(false);
+        Wire.requestFrom(QMC5883L_ADDRESS, 6);
+        if (Wire.available() >= 6)
+        {
+            uint8_t xLo = Wire.read(), xHi = Wire.read();
+            uint8_t yLo = Wire.read(), yHi = Wire.read();
+            Wire.read();
+            Wire.read();
+            int16_t mx = (int16_t)(xLo | (xHi << 8));
+            int16_t my = (int16_t)(yLo | (yHi << 8));
+            heading = (int16_t)(atan2((float)my * 0.092f, (float)mx * 0.092f) * 1800.0f / PI);
+            if (heading < 0) heading += 3600;
+        }
+        Wire.endTransmission(true);
+    }
+}
+
 void sendFrame(uint8_t packetType, const void *payload, uint8_t payloadLength)
 {
     const uint8_t *payloadBytes = (const uint8_t *)payload;
@@ -290,6 +432,9 @@ void setupLoRaWithLibrary()
 
 void setup()
 {
+    Serial.begin(115200);
+    delay(100);
+
     pinMode(PIN_LED, OUTPUT);
     pinMode(PIN_ESC, OUTPUT_OPEN_DRAIN);
     pinMode(PIN_VBAT_SENSE, INPUT_ANALOG);
@@ -325,6 +470,17 @@ void setup()
     ds18Esc.requestTemperatures();
     lastTempRequestMs = millis();
 
+    Wire.setSCL(PB6);
+    Wire.setSDA(PB7);
+    Wire.begin();
+    initGy85();
+    Serial.print("[SETUP] GY-85: ADXL=");
+    Serial.print(adxlFound ? "OK" : "NA");
+    Serial.print(" ITG=");
+    Serial.print(itgFound ? "OK" : "NA");
+    Serial.print(" QMC=");
+    Serial.println(qmcFound ? "OK" : "NA");
+
     Serial1.setTx(PA9);
     Serial1.setRx(PA10);
 
@@ -350,27 +506,37 @@ void loop()
 
     if (telemetryRequested)
     {
-        if (digitalRead(LORA_AUX) == HIGH)
+        if (millis() - lastImuReadMs >= IMU_READ_INTERVAL_MS)
         {
-            TelemetryPacket telemetry;
-            telemetry.voltageMv = (uint16_t)(getBatteryVoltage() * 1000.0f);
-            telemetry.battTempCentiC = battTempCentiC;
-            telemetry.escTempCentiC = escTempCentiC;
-            telemetry.mpuAx = 0;
-            telemetry.mpuAy = 0;
-            telemetry.mpuAz = 0;
-            telemetry.gpsLatE7 = 0;
-            telemetry.gpsLonE7 = 0;
-            telemetry.gpsFix = 1;
-            telemetry.gpsSats = lastTelemetryReqSeq;
-
-            sendFrame(radio::PACKET_TYPE_TELEMETRY, &telemetry, sizeof(TelemetryPacket));
-            delayMicroseconds(2500);
-            sendFrame(radio::PACKET_TYPE_TELEMETRY, &telemetry, sizeof(TelemetryPacket));
-
-            telemetryRequested = false;
-            lastTelemetryTime = millis();
+            readGy85(imuAx, imuAy, imuAz, imuGx, imuGy, imuGz, imuHeading);
+            lastImuReadMs = millis();
         }
+
+        TelemetryPacket telemetry;
+        telemetry.voltageMv = (uint16_t)(getBatteryVoltage() * 1000.0f);
+        telemetry.battTempCentiC = battTempCentiC;
+        telemetry.escTempCentiC = escTempCentiC;
+        telemetry.mpuAx = imuAx;
+        telemetry.mpuAy = imuAy;
+        telemetry.mpuAz = imuAz;
+        telemetry.mpuGx = imuGx;
+        telemetry.mpuGy = imuGy;
+        telemetry.mpuGz = imuGz;
+        telemetry.compassHeading = imuHeading;
+        telemetry.sensorStatus =
+            (adxlFound ? radio::SENSOR_STATUS_ADXL345 : 0) |
+            (itgFound ? radio::SENSOR_STATUS_ITG3205 : 0) |
+            (qmcFound ? radio::SENSOR_STATUS_QMC5883L : 0) |
+            (battTempCentiC != INT16_MIN ? radio::SENSOR_STATUS_DS18_BATT : 0) |
+            (escTempCentiC != INT16_MIN ? radio::SENSOR_STATUS_DS18_ESC : 0);
+        telemetry.i2cErrAdxl = i2cErrAdxl;
+        telemetry.i2cErrItg = i2cErrItg;
+        telemetry.i2cErrQmc = i2cErrQmc;
+
+        sendFrame(radio::PACKET_TYPE_TELEMETRY, &telemetry, sizeof(TelemetryPacket));
+
+        telemetryRequested = false;
+        lastTelemetryTime = millis();
     }
 
     if (millis() - lastPacketTime > RX_TIMEOUT_MS)
