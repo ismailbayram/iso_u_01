@@ -20,8 +20,8 @@ Servo servoRUD;
 #define PIN_GPS_TX PA2
 #define PIN_GPS_RX PA3
 
-#define LORA_M0 PA12
-#define LORA_M1 PA15
+#define LORA_M0 PA15
+#define LORA_M1 PA12
 #define LORA_AUX PA11
 LoRa_E22 e22(&Serial1, LORA_AUX, LORA_M0, LORA_M1, UART_BPS_RATE_9600);
 
