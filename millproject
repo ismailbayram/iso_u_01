@@ -1,0 +1,49 @@
+# --- Birim (Units) ---
+# Asagidaki tum olculer mm cinsinden yazildigi icin bu iki satir sart.
+# metric=1 olmadan pcb2gcode tum sayisal degerleri INCH sanar (ör. zwork=-0.05 -> -0.05 inch = -1.27mm olur!).
+metric=1
+metricoutput=1
+
+# --- Girdiler (Input Files) ---
+# Kendi dosya isimlerine göre buradaki yıldızlı kısımları güncelleyebilirsin
+back=u1flightcontroller-B_Cu.gbl
+drill=u1flightcontroller-PTH.drl
+outline=u1flightcontroller-Edge_Cuts.gm1
+
+# --- Çıktılar (Output Files) ---
+back-output=arkayuz_kazima.nc
+drill-output=delikler.nc
+outline-output=dis_kesim.nc
+
+# --- Kazıma Ayarları (Mill Options) ---
+# Izolasyon kazima ucu (V-Bit) genisligi - back katmani offset hesabi bunu kullanir
+mill-diameters=0.2
+# Bakırı kaldırmak için ineceğimiz derinlik (Z ekseni - mm cinsinden)
+zwork=-0.05
+# Güvenli tırmanma yüksekliği (Z ekseni boşta gezerken yukarı kalkış)
+zsafe=2
+zchange=20
+# Kazıma hızı (Feedrate)
+mill-feed=150
+mill-speed=10000
+
+# --- Delme Ayarları (Drill Options) ---
+# Matkap ucu delmek için karta ne kadar batacak (Kart kalınlığı + pay)
+zdrill=-1.8
+# Güvenli delik hızı
+drill-feed=100
+drill-speed=10000
+
+# --- Dış Kesim Ayarları (Outline Options) ---
+# Disket kesim ucu capi
+cutter-diameter=1
+# Kartı dış sınırından kesip koparmak için derinlik
+zcut=-1.7
+# Kesim hızı
+cut-feed=100
+cut-speed=10000
+cut-infeed=0.4
+offset=0
+extra-passes=0
+tolerance=0.05
+tsp-2opt=0
