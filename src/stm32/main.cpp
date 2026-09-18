@@ -40,8 +40,8 @@ LoRa_E22 e22(&Serial1, LORA_AUX, LORA_M0, LORA_M1, UART_BPS_RATE_9600);
 
 const int MIN_THROTTLE = 1100;
 const int MAX_THROTTLE = 1940;
-const float VBAT_DIVIDER_R_TOP = 100000.0f;
-const float VBAT_DIVIDER_R_BOTTOM = 20000.0f;
+const float VBAT_DIVIDER_R_TOP = 330000.0f;
+const float VBAT_DIVIDER_R_BOTTOM = 47000.0f;
 const float ADC_REF_V = 3.3f;
 const float ADC_MAX_COUNTS = 4095.0f;
 
@@ -439,6 +439,7 @@ void setup()
     pinMode(PIN_LED, OUTPUT);
     pinMode(PIN_ESC, OUTPUT_OPEN_DRAIN);
     pinMode(PIN_VBAT_SENSE, INPUT_ANALOG);
+    analogReadResolution(12);
     pinMode(LORA_M0, OUTPUT);
     pinMode(LORA_M1, OUTPUT);
     pinMode(LORA_AUX, INPUT);

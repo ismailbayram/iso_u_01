@@ -41,7 +41,7 @@ Bu bölümde, STM32F411CEU6 (Black Pill) kartının uçak bileşenleri arasında
 | **NEO-7M GPS (UART)**  | VCC <br> GND <br> TX <br> RX                                        | **5V veya 3.3V*** <br> **GND** <br> **PA3 (USART2 RX)** <br> **PA2 (USART2 TX)**                                                                      | GPS TX -> STM32 RX, GPS RX -> STM32 TX. Genelde sadece TX hattı yeterlidir.                                                                          |
 | **DS18B20 (Pil Sıcaklık)** | VDD <br> GND <br> DQ                                            | **3.3V** <br> **GND** <br> **PA5 (1-Wire, ADC1_IN5 pin üzerinde GPIO olarak)**                                                                          | Pil sıcaklığı ölçümü. DQ hattına **4.7kΩ pull-up** (3.3V'a).                                                                                         |
 | **DS18B20 (ESC Sıcaklık)** | VDD <br> GND <br> DQ                                            | **3.3V** <br> **GND** <br> **PB1 (1-Wire)**                                                                                                              | ESC sıcaklığı ölçümü. DQ hattına **4.7kΩ pull-up** (3.3V'a).                                                                                         |
-| **Batarya Voltaj Ölçümü (3S LiPo, ADC)** | Batarya (+) -> R1 -> ADC düğüm <br> ADC düğüm -> R2 -> GND <br> Batarya (-) -> GND | **PA4 (ADC1_IN4)** <br> **GND**                                                                                                                          | Pil seviyesi doğrudan LiPo'dan ölçülür. Örnek bölücü: **R1=100kΩ (üst)**, **R2=20kΩ (alt)**. 12.6V tam doluda ADC girişini ~2.1V seviyesinde tutar. |
+| **Batarya Voltaj Ölçümü (3S LiPo, ADC)** | Batarya (+) -> R1 -> ADC düğüm <br> ADC düğüm -> R2 -> GND <br> Batarya (-) -> GND | **PA4 (ADC1_IN4)** <br> **GND**                                                                                                                          | Pil seviyesi doğrudan LiPo'dan ölçülür. Bölücü: **R1=330kΩ (üst)**, **R2=47kΩ (alt)**. 12.6V tam doluda ADC girişini ~1.57V seviyesinde tutar. |
 | **FT232 (USB-UART, opsiyonel)**   | TXD <br> RXD <br> VCC <br> GND                                      | **PB10 (USART3 TX)** <br> **PB11 (USART3 RX)** <br> **3.3V veya 5V** <br> **GND**                                                                       | GPS USART2'ye (PA2/PA3) taşındığı için PB10/PB11 boşa çıktı — FT232 debug için kullanılabilir. |
 
 > ⚠️ **Open-Drain ve Pull-Up** — ESC ve servo sinyal pinleri open-drain modunda çalışır. Her sinyal hattında **4.7kΩ–10kΩ pull-up direnci** 5V hattına bağlanmalıdır. Aksi halde sinyal 3.3V'de kalır ve servo/ESC çalışmayabilir.  
@@ -62,8 +62,12 @@ Bu bölümde, STM32F411CEU6 (Black Pill) kartının uçak bileşenleri arasında
 > 💡 **Kondansatör Yerleşimi (Önerilen)**
 > - Servo/ESC 5V güç hattına (5V-GND arası) en az **470uF** düşük ESR kondansatör ekleyin.
 > - Her DS18B20 sensörünün VDD-GND uçlarına sensöre yakın **100nF seramik** kondansatör ekleyin.
-> - PA4 ADC ölçüm düğümüne (PA4-GND arası) **10uF** kondansatör paralel ekleyin (ölçümü yumuşatır).
+> - PA4 ADC ölçüm düğümüne (PA4-GND arası) **10uF** kondansatör paralel ekleyin (ölçümü yumuşatır). Bölücünün çıkış empedansı ~41kΩ olduğundan bu kondansatör **zorunludur**; yoksa ADC okuması hatalı olur.
 
-> 💡 **3S LiPo Bölücü Önerisi** — R1=100kΩ ve R2=20kΩ ile bölücü oranı 6:1 olur. 12.6V / 6 = 2.1V, yani PA4 ADC için güvenli aralıktadır.
+> 💡 **3S LiPo Bölücü** — R1=330kΩ ve R2=47kΩ ile bölücü oranı (330+47)/47 ≈ 8.02:1 olur.
+> - 12.6V (tam dolu) / 8.02 ≈ **1.57V**, 9.0V (boş) / 8.02 ≈ **1.12V** — PA4 ADC için güvenli aralıktadır.
+> - Ölçülebilir maksimum pil voltajı ≈ 3.3V × 8.02 ≈ 26.5V; yanlışlıkla 4S (16.8V) bağlansa bile PA4'te ~2.09V olur.
+> - 12-bit ADC ile çözünürlük ≈ 6.5 mV (pil tarafı). Pilden sürekli çekilen akım ≈ 33 µA.
+> - Direnç toleransı (±%1–5) okumayı etkiler; takılan dirençleri multimetreyle ölçüp gerçek değeri `src/stm32/main.cpp` içindeki `VBAT_DIVIDER_R_TOP` / `VBAT_DIVIDER_R_BOTTOM` sabitlerine yazın.
 
 > 💡 **DS18B20 Alternatifi** — İki DS18B20 tek bir 1-Wire hattında da çalışabilir. Bu durumda tek pin + tek 4.7kΩ pull-up yeterlidir; sensörler yazılımda ROM ID ile ayrılır.
