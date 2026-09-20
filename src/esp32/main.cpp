@@ -4,6 +4,10 @@
 #include <LoRa_E22.h>
 #include <Wire.h>
 #include "radio_protocol.h"
+
+#ifndef USE_GPS
+#define USE_GPS 0
+#endif
 // #include <BleGamepad.h>
 
 // PIN Definitions
@@ -63,11 +67,17 @@ uint8_t telemetryReqSeq = 0;
 uint32_t telemetryReqSentCount = 0;
 uint32_t telemetryRxCount = 0;
 
+#if USE_GPS
 const uint8_t MIN_SATS_REQUIRED = 4;
-const unsigned long GPS_DISPLAY_INTERVAL_MS = 500;
 const unsigned long LOW_SAT_BEEP_INTERVAL_MS = 2000;
-unsigned long lastGpsDisplayTime = 0;
 unsigned long lastLowSatBeepTime = 0;
+#endif
+const unsigned long STATUS_DISPLAY_INTERVAL_MS = 500;
+const unsigned long TELEMETRY_LOST_TIMEOUT_MS = 3000;
+const unsigned long LINK_LOST_BEEP_INTERVAL_MS = 2000;
+unsigned long lastStatusDisplayTime = 0;
+unsigned long lastTelemetryRxTime = 0;
+unsigned long lastLinkLostBeepTime = 0;
 
 void sendFrame(uint8_t packetType, const void *payload, uint8_t payloadLength)
 {
@@ -129,6 +139,7 @@ bool parseIncomingLoRaByte(uint8_t b)
     {
       memcpy(&lastTelemetry, rxPayloadBuffer, sizeof(TelemetryPacket));
       telemetryRxCount++;
+      lastTelemetryRxTime = millis();
       return true;
     }
     break;
@@ -239,20 +250,34 @@ void setupDisplay()
   }
 }
 
-void updateGpsStatusDisplay()
+void printTemperature(int16_t centiC)
 {
-  if (millis() - lastGpsDisplayTime < GPS_DISPLAY_INTERVAL_MS)
+  if (centiC == INT16_MIN)
+  {
+    display.print("--");
+  }
+  else
+  {
+    display.print(centiC / 100.0f, 1);
+  }
+}
+
+void updateStatusDisplay()
+{
+  if (millis() - lastStatusDisplayTime < STATUS_DISPLAY_INTERVAL_MS)
   {
     return;
   }
-  lastGpsDisplayTime = millis();
-
-  bool lowSats = lastTelemetry.gpsSats < MIN_SATS_REQUIRED;
+  lastStatusDisplayTime = millis();
 
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
   display.setCursor(0, 0);
+
+#if USE_GPS
+  bool lowSats = lastTelemetry.gpsSats < MIN_SATS_REQUIRED;
+
   display.print("Uydu: ");
   display.println(lastTelemetry.gpsSats);
   if (lowSats)
@@ -271,6 +296,37 @@ void updateGpsStatusDisplay()
     lastLowSatBeepTime = millis();
     tone(PIN_BUZZER, 330, 150);
   }
+#else
+  // GPS bu asamada kullanilmiyor; ekranda telemetri ve link durumu gosteriliyor.
+  bool linkLost = (lastTelemetryRxTime == 0) ||
+                  (millis() - lastTelemetryRxTime > TELEMETRY_LOST_TIMEOUT_MS);
+
+  if (linkLost)
+  {
+    display.println("TELEMETRI YOK");
+    display.println("Baglanti bekleniyor");
+  }
+  else
+  {
+    display.print("Batarya: ");
+    display.print(lastTelemetry.voltageMv / 1000.0f, 2);
+    display.println("V");
+    display.print("Tb ");
+    printTemperature(lastTelemetry.battTempCentiC);
+    display.print(" Tesc ");
+    printTemperature(lastTelemetry.escTempCentiC);
+    display.println("C");
+    display.print("Link OK  #");
+    display.println(telemetryRxCount);
+  }
+  display.display();
+
+  if (linkLost && millis() - lastLinkLostBeepTime >= LINK_LOST_BEEP_INTERVAL_MS)
+  {
+    lastLinkLostBeepTime = millis();
+    tone(PIN_BUZZER, 330, 150);
+  }
+#endif
 }
 
 static float filteredLX = 2048;
@@ -393,6 +449,7 @@ void loop()
         Serial.print(lastTelemetry.mpuGz);
         Serial.print(" hdg=");
         Serial.print(lastTelemetry.compassHeading / 10.0f, 1);
+#if USE_GPS
         Serial.print(" GPSfix=");
         Serial.print(lastTelemetry.gpsFix);
         Serial.print(" sats=");
@@ -400,12 +457,14 @@ void loop()
         Serial.print(" lat=");
         Serial.print(lastTelemetry.gpsLatE7 / 10000000.0, 6);
         Serial.print(" lon=");
-        Serial.println(lastTelemetry.gpsLonE7 / 10000000.0, 6);
+        Serial.print(lastTelemetry.gpsLonE7 / 10000000.0, 6);
+#endif
+        Serial.println();
       }
     }
   }
 
-  updateGpsStatusDisplay();
+  updateStatusDisplay();
 
   if (millis() - lastTelemetryRequestTime >= TELEMETRY_REQUEST_INTERVAL_MS)
   {

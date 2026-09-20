@@ -3,9 +3,16 @@
 #include <LoRa_E22.h>
 #include <OneWire.h>
 #include <Servo.h>
-#include <TinyGPSPlus.h>
 #include <Wire.h>
 #include "radio_protocol.h"
+
+#ifndef USE_GPS
+#define USE_GPS 0
+#endif
+
+#if USE_GPS
+#include <TinyGPSPlus.h>
+#endif
 
 #define ADXL345_ADDRESS 0x53
 #define ADXL345_POWER_CTL 0x2D
@@ -30,8 +37,10 @@ Servo servoRUD;
 #define PIN_DS18_BATT PA5
 #define PIN_DS18_ESC PB1
 #define PIN_VBAT_SENSE PA4
+#if USE_GPS
 #define PIN_GPS_TX PA2
 #define PIN_GPS_RX PA3
+#endif
 
 #define LORA_M0 PA15
 #define LORA_M1 PA12
@@ -40,6 +49,13 @@ LoRa_E22 e22(&Serial1, LORA_AUX, LORA_M0, LORA_M1, UART_BPS_RATE_9600);
 
 const int MIN_THROTTLE = 1100;
 const int MAX_THROTTLE = 1940;
+// Kumanda cubugunun tam salinimi servoyu 0-180 arasi suruyordu; bu kadar buyuk
+// bir yol kumanda yuzeylerinin plastik baglantilarini zorluyor. Merkez 90 derece
+// sabit kalacak sekilde yolu yariya indiriyoruz: 45-135 derece.
+const int SERVO_CENTER_DEG = 90;
+const int SERVO_TRAVEL_DEG = 45;
+const int SERVO_MIN_DEG = SERVO_CENTER_DEG - SERVO_TRAVEL_DEG;
+const int SERVO_MAX_DEG = SERVO_CENTER_DEG + SERVO_TRAVEL_DEG;
 const float VBAT_DIVIDER_R_TOP = 330000.0f;
 const float VBAT_DIVIDER_R_BOTTOM = 47000.0f;
 const float ADC_REF_V = 3.3f;
@@ -78,7 +94,9 @@ int16_t imuHeading = 0;
 unsigned long lastImuReadMs = 0;
 const unsigned long IMU_READ_INTERVAL_MS = 50;
 
+#if USE_GPS
 TinyGPSPlus gps;
+#endif
 int32_t gpsLatE7 = 0;
 int32_t gpsLonE7 = 0;
 uint8_t gpsFix = 0;
@@ -91,9 +109,9 @@ void applyOutputs(const ControlPacket &packet)
     const int center = 2048;
     const int deadband = 45;
     const float filterAlpha = 0.35f;
-    static int lastServoAIL = 90;
-    static int lastServoELE = 90;
-    static int lastServoRUD = 90;
+    static int lastServoAIL = SERVO_CENTER_DEG;
+    static int lastServoELE = SERVO_CENTER_DEG;
+    static int lastServoRUD = SERVO_CENTER_DEG;
     static float filteredLX = 2048.0f;
     static float filteredLY = 0.0f;
     static float filteredRX = 2048.0f;
@@ -122,9 +140,9 @@ void applyOutputs(const ControlPacket &packet)
         ry = center;
     }
 
-    int s1 = map(rx, 0, 4095, 0, 180);
-    int s2 = map(ry, 0, 4095, 0, 180);
-    int s3 = map(lx, 0, 4095, 0, 180);
+    int s1 = map(constrain(rx, 0, 4095), 0, 4095, SERVO_MIN_DEG, SERVO_MAX_DEG);
+    int s2 = map(constrain(ry, 0, 4095), 0, 4095, SERVO_MIN_DEG, SERVO_MAX_DEG);
+    int s3 = map(constrain(lx, 0, 4095), 0, 4095, SERVO_MIN_DEG, SERVO_MAX_DEG);
     int escUs = map(constrain(ly, 0, 4095), 0, 4095, MIN_THROTTLE, MAX_THROTTLE);
 
     myESC.writeMicroseconds(escUs);
@@ -149,9 +167,9 @@ void applyOutputs(const ControlPacket &packet)
 void applyFailsafe()
 {
     myESC.writeMicroseconds(MIN_THROTTLE);
-    servoAIL.write(90);
-    servoELE.write(90);
-    servoRUD.write(90);
+    servoAIL.write(SERVO_CENTER_DEG);
+    servoELE.write(SERVO_CENTER_DEG);
+    servoRUD.write(SERVO_CENTER_DEG);
 }
 
 bool parseIncomingByte(uint8_t b)
@@ -458,9 +476,9 @@ void setup()
     pinMode(PIN_SERVO_ELE, OUTPUT_OPEN_DRAIN);
     pinMode(PIN_SERVO_RUD, OUTPUT_OPEN_DRAIN);
 
-    servoAIL.write(90);
-    servoELE.write(90);
-    servoRUD.write(90);
+    servoAIL.write(SERVO_CENTER_DEG);
+    servoELE.write(SERVO_CENTER_DEG);
+    servoRUD.write(SERVO_CENTER_DEG);
 
     ds18Batt.begin();
     ds18Esc.begin();
@@ -486,9 +504,11 @@ void setup()
     Serial1.setTx(PA9);
     Serial1.setRx(PA10);
 
+#if USE_GPS
     Serial2.setTx(PIN_GPS_TX);
     Serial2.setRx(PIN_GPS_RX);
     Serial2.begin(9600);
+#endif
 
     setupLoRaWithLibrary();
 
@@ -510,6 +530,7 @@ void loop()
         bytesProcessed++;
     }
 
+#if USE_GPS
     while (Serial2.available())
     {
         gps.encode(Serial2.read());
@@ -525,6 +546,7 @@ void loop()
         gpsFix = 0;
     }
     gpsSats = gps.satellites.isValid() ? (uint8_t)constrain(gps.satellites.value(), 0, 255) : 0;
+#endif
 
     if (telemetryRequested)
     {
