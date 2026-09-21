@@ -1,3 +1,4 @@
+#include <Adafruit_BMP280.h>
 #include <Arduino.h>
 #include <DallasTemperature.h>
 #include <LoRa_E22.h>
@@ -24,6 +25,11 @@
 
 #define QMC5883L_ADDRESS 0x0D
 #define QMC5883L_DATA_REG 0x00
+
+// Breakout'larda CSB/SDO kart uzerinde cekili oldugu icin adres modele gore
+// degisiyor; ikisi de denenir.
+#define BMP280_ADDRESS_PRIMARY 0x76
+#define BMP280_ADDRESS_SECONDARY 0x77
 
 Servo myESC;
 Servo servoAIL;
@@ -56,6 +62,8 @@ const int SERVO_CENTER_DEG = 90;
 const int SERVO_TRAVEL_DEG = 45;
 const int SERVO_MIN_DEG = SERVO_CENTER_DEG - SERVO_TRAVEL_DEG;
 const int SERVO_MAX_DEG = SERVO_CENTER_DEG + SERVO_TRAVEL_DEG;
+// Ust bacak = besleme kablosuna seri eklenen 330k.
+// Alt bacak = kart uzerindeki R7 (47k), PA4 ile GND arasinda.
 const float VBAT_DIVIDER_R_TOP = 330000.0f;
 const float VBAT_DIVIDER_R_BOTTOM = 47000.0f;
 const float ADC_REF_V = 3.3f;
@@ -93,6 +101,13 @@ int16_t imuGx = 0, imuGy = 0, imuGz = 0;
 int16_t imuHeading = 0;
 unsigned long lastImuReadMs = 0;
 const unsigned long IMU_READ_INTERVAL_MS = 50;
+
+Adafruit_BMP280 bmp;
+static bool bmpFound = false;
+uint32_t baroPressurePa = 0;
+int16_t baroTempCentiC = INT16_MIN;
+unsigned long lastBaroReadMs = 0;
+const unsigned long BARO_READ_INTERVAL_MS = 100;
 
 #if USE_GPS
 TinyGPSPlus gps;
@@ -332,6 +347,38 @@ void initGy85()
     }
 }
 
+void initBmp280()
+{
+    bmpFound = bmp.begin(BMP280_ADDRESS_PRIMARY) || bmp.begin(BMP280_ADDRESS_SECONDARY);
+    if (!bmpFound)
+    {
+        return;
+    }
+
+    bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,
+                    Adafruit_BMP280::SAMPLING_X2,
+                    Adafruit_BMP280::SAMPLING_X16,
+                    Adafruit_BMP280::FILTER_X16,
+                    Adafruit_BMP280::STANDBY_MS_63);
+}
+
+void readBmp280()
+{
+    if (!bmpFound)
+    {
+        return;
+    }
+
+    float pressure = bmp.readPressure();
+    float temperature = bmp.readTemperature();
+
+    if (pressure > 0.0f)
+    {
+        baroPressurePa = (uint32_t)pressure;
+        baroTempCentiC = (int16_t)(temperature * 100.0f);
+    }
+}
+
 void readGy85(int16_t &ax, int16_t &ay, int16_t &az,
               int16_t &gx, int16_t &gy, int16_t &gz,
               int16_t &heading)
@@ -494,6 +541,9 @@ void setup()
     Wire.setSDA(PB7);
     Wire.begin();
     initGy85();
+    initBmp280();
+    Serial.print("[SETUP] BMP280: ");
+    Serial.println(bmpFound ? "OK" : "NA");
     Serial.print("[SETUP] GY-85: ADXL=");
     Serial.print(adxlFound ? "OK" : "NA");
     Serial.print(" ITG=");
@@ -556,6 +606,12 @@ void loop()
             lastImuReadMs = millis();
         }
 
+        if (millis() - lastBaroReadMs >= BARO_READ_INTERVAL_MS)
+        {
+            readBmp280();
+            lastBaroReadMs = millis();
+        }
+
         TelemetryPacket telemetry;
         telemetry.voltageMv = (uint16_t)(getBatteryVoltage() * 1000.0f);
         telemetry.battTempCentiC = battTempCentiC;
@@ -571,6 +627,8 @@ void loop()
         telemetry.gpsLonE7 = gpsLonE7;
         telemetry.gpsFix = gpsFix;
         telemetry.gpsSats = gpsSats;
+        telemetry.pressurePa = baroPressurePa;
+        telemetry.baroTempCentiC = baroTempCentiC;
 
         sendFrame(radio::PACKET_TYPE_TELEMETRY, &telemetry, sizeof(TelemetryPacket));
 

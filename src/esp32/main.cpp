@@ -79,6 +79,20 @@ unsigned long lastStatusDisplayTime = 0;
 unsigned long lastTelemetryRxTime = 0;
 unsigned long lastLinkLostBeepTime = 0;
 
+// Ilk gecerli basinc olcumu referans alinip irtifa ona gore hesaplanir, boylece
+// kalkis noktasi sifir olur. Mutlak irtifa icin deniz seviyesi basinci gerekirdi.
+uint32_t baselinePressurePa = 0;
+float relativeAltitudeM = 0.0f;
+
+float pressureToAltitude(uint32_t pressurePa, uint32_t referencePa)
+{
+  if (pressurePa == 0 || referencePa == 0)
+  {
+    return 0.0f;
+  }
+  return 44330.0f * (1.0f - powf((float)pressurePa / (float)referencePa, 0.1902949f));
+}
+
 void sendFrame(uint8_t packetType, const void *payload, uint8_t payloadLength)
 {
   const uint8_t *payloadBytes = (const uint8_t *)payload;
@@ -140,6 +154,14 @@ bool parseIncomingLoRaByte(uint8_t b)
       memcpy(&lastTelemetry, rxPayloadBuffer, sizeof(TelemetryPacket));
       telemetryRxCount++;
       lastTelemetryRxTime = millis();
+      if (lastTelemetry.pressurePa != 0)
+      {
+        if (baselinePressurePa == 0)
+        {
+          baselinePressurePa = lastTelemetry.pressurePa;
+        }
+        relativeAltitudeM = pressureToAltitude(lastTelemetry.pressurePa, baselinePressurePa);
+      }
       return true;
     }
     break;
@@ -316,6 +338,16 @@ void updateStatusDisplay()
     display.print(" Tesc ");
     printTemperature(lastTelemetry.escTempCentiC);
     display.println("C");
+    display.print("Irtifa: ");
+    if (lastTelemetry.pressurePa == 0)
+    {
+      display.println("--");
+    }
+    else
+    {
+      display.print(relativeAltitudeM, 1);
+      display.println("m");
+    }
     display.print("Link OK  #");
     display.println(telemetryRxCount);
   }
@@ -449,6 +481,20 @@ void loop()
         Serial.print(lastTelemetry.mpuGz);
         Serial.print(" hdg=");
         Serial.print(lastTelemetry.compassHeading / 10.0f, 1);
+        Serial.print(" baro=");
+        if (lastTelemetry.pressurePa == 0)
+        {
+          Serial.print("NA");
+        }
+        else
+        {
+          Serial.print(lastTelemetry.pressurePa);
+          Serial.print("Pa alt=");
+          Serial.print(relativeAltitudeM, 1);
+          Serial.print("m Tbaro=");
+          Serial.print(lastTelemetry.baroTempCentiC / 100.0f, 1);
+          Serial.print("C");
+        }
 #if USE_GPS
         Serial.print(" GPSfix=");
         Serial.print(lastTelemetry.gpsFix);

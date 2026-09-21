@@ -40,6 +40,8 @@ struct __attribute__((packed)) TelemetryPacket {
   int32_t gpsLonE7;
   uint8_t gpsFix;
   uint8_t gpsSats;
+  uint32_t pressurePa;     // BMP280 basinci, Pascal. Sensor yoksa 0.
+  int16_t baroTempCentiC;  // BMP280 sicakligi, santi-derece. Sensor yoksa INT16_MIN.
 };
 
 inline uint8_t computeFrameChecksum(uint8_t packetType, uint8_t payloadLength, const uint8_t *payload) {
