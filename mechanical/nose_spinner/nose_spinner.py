@@ -8,7 +8,8 @@ Measured on the aircraft, from the front face of the nose:
 So the spinner touches neither the shaft nor the nose. It is a single shell
 that rotates with the motor:
 
-  - the rear opening matches the nose diameter and runs 2 mm clear of it
+  - the rear opening matches the nose diameter and runs REAR_GAP clear of it
+    (the first print rubbed at 2 mm, so it is now 5 mm)
   - it wraps the exposed can with ~1 mm clearance
   - two slots let the propeller blades through
   - inside, a socket grips the bullet prop nut; two M3 grub screws run through
@@ -57,12 +58,12 @@ HUB_FRONT_Z = PROP_SEAT_Z + HUB_T
 NUT_TIP_Z = HUB_FRONT_Z + NUT_HEX_H + NUT_CONE_L
 
 # --- Shell ---
-REAR_GAP = 2.0  # air gap in front of the nose
+REAR_GAP = 12.0  # air gap in front of the nose, trimmed back twice to stop it rubbing
 TIP_Z = 62.0  # overall tip, ~9 mm past the nut
 WALL = 2.0
 SHELL_K, SHELL_P = 2.2, 0.62  # r(t) = R (1 - (t/L)^K)^P
-VENT_D = 7.0
-VENT_Z = 8.0
+VENT_D = 5.5
+VENT_Z = 17.5  # between the rear rim and the blade slots
 VENT_COUNT = 6
 
 # --- Blade slots ---
