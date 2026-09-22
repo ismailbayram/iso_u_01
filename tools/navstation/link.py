@@ -5,9 +5,11 @@ None doner ve cagiran taraf sayar.
 """
 
 import threading
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 import serial
+from serial.tools import list_ports
 
 # Firmware INT16_MIN yolluyor: sensor yok demek, 0 derece degil.
 TEMP_ABSENT = -32768
@@ -20,6 +22,24 @@ FLAG_CALIBRATED = 0x10
 FLAG_ARMED = 0x20
 
 _COMMANDS = {"CAL", "CALCLR", "DISARM"}
+
+# Seri port gibi gorunup kumanda olmayanlar. macOS'ta Bluetooth koprusu her
+# zaman listede cikar ve secilirse baglanti sessizce bos kalir.
+_PORT_BLOCKLIST = ("bluetooth",)
+
+
+def usable_ports(devices: Iterable[str]) -> list[str]:
+    """Kumanda olamayacak portlari eler, sirayi korur."""
+    return [d for d in devices
+            if not any(bad in d.lower() for bad in _PORT_BLOCKLIST)]
+
+
+def available_ports() -> list[str]:
+    """Su an takili olan kullanilabilir portlar. Hicbir kosulda istisna atmaz."""
+    try:
+        return usable_ports(port.device for port in list_ports.comports())
+    except Exception:
+        return []
 
 
 @dataclass(frozen=True)

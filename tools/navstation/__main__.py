@@ -1,27 +1,26 @@
-"""Giris noktasi:  python -m navstation --port /dev/cu.usbserial-XXXX"""
+"""Giris noktasi:  python -m navstation  [--port /dev/cu.usbserial-XXXX]
+
+Port verilmezse pencere baglantisiz acilir ve alt seritten secilir.
+"""
 
 import argparse
-import sys
 
-from . import link, ui
+from . import ui
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="ISO U1 yer istasyonu")
-    parser.add_argument("--port", required=True,
-                        help="ESP32 kumandanin seri portu")
+    parser.add_argument("--port", default=None,
+                        help="Acilista baglanilacak seri port. Verilmezse "
+                             "arayuzden secilir.")
     parser.add_argument("--baud", type=int, default=115200)
     args = parser.parse_args()
 
-    serial_link = link.SerialLink(args.port, args.baud)
-    if not serial_link.open():
-        print(f"Port acilamadi: {serial_link.last_error}", file=sys.stderr)
-        return 1
-
+    window = ui.NavStationWindow(baud=args.baud, initial_port=args.port)
     try:
-        ui.NavStationWindow(serial_link).run()
+        window.run()
     finally:
-        serial_link.close()
+        window.shutdown()
     return 0
 
 

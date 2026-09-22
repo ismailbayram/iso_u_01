@@ -3,7 +3,7 @@
 import math
 import time
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 
 from . import attitude, link
 
@@ -11,6 +11,7 @@ REFRESH_MS = 100
 LINK_STALE_MS = 3000
 CALIBRATION_TIMEOUT_MS = 5000
 DISARM_TIMEOUT_MS = 3000
+PORT_RESCAN_MS = 2000
 
 HORIZON_SIZE = 320
 HORIZON_RADIUS = 140
@@ -25,8 +26,12 @@ PLANE = "#ffd24a"
 
 
 class NavStationWindow:
-    def __init__(self, serial_link: link.SerialLink):
-        self.link = serial_link
+    def __init__(self, baud: int = 115200, initial_port: str | None = None):
+        # Baglanti yasam dongusu pencerenin: bagla/kes operatorun elinde.
+        self.link: link.SerialLink | None = None
+        self.baud = baud
+        self.initial_port = initial_port
+        self.port_names: list[str] = []
         self.reference_pa: int | None = None
         self.calibration_deadline_ms: int | None = None
         self.calibration_baseline_flags: int = 0
@@ -95,6 +100,17 @@ class NavStationWindow:
         bar = tk.Frame(self.root, bg=BG)
         bar.pack(fill="x", padx=12, pady=(0, 12))
 
+        self.port_combo = ttk.Combobox(bar, state="readonly", width=24, values=())
+        self.port_combo.pack(side="left")
+
+        self.refresh_button = tk.Button(
+            bar, text="YENILE", command=self._refresh_ports)
+        self.refresh_button.pack(side="left", padx=6)
+
+        self.connect_button = tk.Button(
+            bar, text="BAGLAN", command=self._on_connect_toggle)
+        self.connect_button.pack(side="left", padx=(0, 12))
+
         self.calibrate_button = tk.Button(
             bar, text="KALIBRE ET", command=self._on_calibrate, state="disabled")
         self.calibrate_button.pack(side="left")
@@ -111,9 +127,90 @@ class NavStationWindow:
         self.status = tk.Label(bar, text="Baglaniyor...", bg=BG, fg=DIM, anchor="w")
         self.status.pack(side="left", fill="x", expand=True, padx=12)
 
+    # -- baglanti ---------------------------------------------------------
+
+    def _refresh_ports(self) -> None:
+        ports = link.available_ports()
+        if ports == self.port_names:
+            return
+
+        self.port_names = ports
+        self.port_combo.configure(values=tuple(ports))
+
+        if self.port_combo.get() not in ports:
+            # Tek aday varsa secili gelsin; operator her acilista ayni
+            # tiklamayi yapmak zorunda kalmasin.
+            self.port_combo.set(ports[0] if len(ports) == 1 else "")
+
+    def _schedule_port_rescan(self) -> None:
+        # Bagli degilken liste kendi kendine tazelenir: kumandayi taktiginda
+        # YENILE'ye basmayi unutup "niye listede yok" dememek icin.
+        if self.link is None:
+            self._refresh_ports()
+        self.root.after(PORT_RESCAN_MS, self._schedule_port_rescan)
+
+    def _on_connect_toggle(self) -> None:
+        if self.link is not None:
+            self._disconnect()
+            return
+
+        port = self.port_combo.get().strip()
+        if not port:
+            self.status.configure(text="Once bir port sec")
+            return
+        self._connect(port)
+
+    def _connect(self, port: str) -> None:
+        candidate = link.SerialLink(port, self.baud)
+        if not candidate.open():
+            # Hata durum satirinda kalir ve pencere acik kalir; amac zaten
+            # baska bir port secebilmek.
+            self.status.configure(text=f"Port acilamadi: {candidate.last_error}")
+            return
+
+        self.link = candidate
+        self._reset_session_state()
+        self.connect_button.configure(text="KES", state="normal")
+        self.port_combo.configure(state="disabled")
+        self.refresh_button.configure(state="disabled")
+        self.status.configure(text=f"{port} baglandi, telemetri bekleniyor...")
+
+    def _disconnect(self) -> None:
+        if self.link is not None:
+            self.link.close()
+            self.link = None
+
+        self._reset_session_state()
+        self.connect_button.configure(text="BAGLAN", state="normal")
+        self.port_combo.configure(state="readonly")
+        self.refresh_button.configure(state="normal")
+        self.status.configure(text="Baglanti kesildi - port sec ve BAGLAN'a bas")
+
+    def _reset_session_state(self) -> None:
+        # Her baglanti yeni bir oturum: irtifa sifiri yeniden yakalanir,
+        # bayatlik sayaclari ve bekleyen onaylar temizlenir.
+        self.reference_pa = None
+        self.last_rx_count = None
+        self.last_packet_wall_time = None
+        self.calibration_deadline_ms = None
+        self.pending_calibration = None
+        self.disarm_deadline_ms = None
+        self.disarm_baseline_rx = None
+        for label in (*self.left_values.values(), *self.right_values.values()):
+            label.configure(text="--", fg=DIM)
+
+    def shutdown(self) -> None:
+        """Pencere kapandiktan sonra portu birak."""
+        if self.link is not None:
+            self.link.close()
+            self.link = None
+
     # -- komutlar ---------------------------------------------------------
 
     def _on_calibrate(self) -> None:
+        if self.link is None:
+            return
+
         confirmed = messagebox.askokcancel(
             "Kalibrasyon",
             "Ucak duz zeminde, hareketsiz ve motor kapali mi?\n\n"
@@ -134,6 +231,8 @@ class NavStationWindow:
             self.status.configure(text=f"Komut gonderilemedi: {self.link.last_error}")
 
     def _on_clear_calibration(self) -> None:
+        if self.link is None:
+            return
         if not messagebox.askokcancel("Kalibrasyon", "Kalibrasyon silinsin mi?"):
             return
 
@@ -148,6 +247,8 @@ class NavStationWindow:
             self.status.configure(text=f"Komut gonderilemedi: {self.link.last_error}")
 
     def _on_disarm(self) -> None:
+        if self.link is None:
+            return
         if self.link.send_command("DISARM"):
             telemetry = self.link.latest_telemetry()
             self.disarm_baseline_rx = telemetry.rx_count if telemetry else None
@@ -159,6 +260,13 @@ class NavStationWindow:
     # -- dongu ------------------------------------------------------------
 
     def run(self) -> None:
+        self._refresh_ports()
+        if self.initial_port:
+            self.port_combo.set(self.initial_port)
+            self._connect(self.initial_port)
+        else:
+            self.status.configure(text="Port sec ve BAGLAN'a bas")
+        self._schedule_port_rescan()
         self._tick()
         self.root.mainloop()
 
@@ -173,6 +281,11 @@ class NavStationWindow:
             self.root.after(REFRESH_MS, self._tick)
 
     def _refresh(self) -> None:
+        if self.link is None:
+            self._draw_horizon(0.0, 0.0)
+            self._set_buttons_enabled(False)
+            return
+
         telemetry = self.link.latest_telemetry()
 
         if telemetry is not None and telemetry.rx_count != self.last_rx_count:
@@ -315,11 +428,15 @@ class NavStationWindow:
         armed = bool(t.flags & link.FLAG_ARMED)
         busy = (self.calibration_deadline_ms is not None
                 or self.disarm_deadline_ms is not None)
-        can_calibrate = self.link.is_open and not armed and not busy and not stale
+        connected = self.link is not None and self.link.is_open
+        can_calibrate = connected and not armed and not busy and not stale
 
         self.calibrate_button.configure(state="normal" if can_calibrate else "disabled")
         self.clear_button.configure(state="normal" if can_calibrate else "disabled")
-        self.disarm_button.configure(state="normal" if self.link.is_open else "disabled")
+        self.disarm_button.configure(state="normal" if connected else "disabled")
+        # Bekleyen onay varken KES pasif: yarida kesip operatoru belirsiz
+        # birakmayalim.
+        self.connect_button.configure(state="disabled" if busy else "normal")
 
     def _set_buttons_enabled(self, enabled: bool) -> None:
         state = "normal" if enabled else "disabled"

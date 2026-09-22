@@ -10,15 +10,30 @@ panellerle gösterir, GY-85 kalibrasyonunu tetikler.
 
 ## Çalıştırma
 
-Portu bul:
+`tools/` dizininden:
 
-    ls /dev/cu.usbserial-* /dev/cu.SLAB_USBtoUART 2>/dev/null
+    ../.env/bin/python -m navstation
 
-Sonra `tools/` dizininden:
+Pencere bağlantısız açılır. Alt şeritteki listeden portu seç ve **BAGLAN**'a bas.
+Liste bağlı değilken iki saniyede bir kendini tazeler, yani kumandayı program
+açıkken taksan da görünür; **YENILE** elle taramak için.
+
+Tek port varsa hazır seçili gelir. Bluetooth portları listeden elenir — seri
+görünürler ama kumanda değillerdir.
+
+Portu baştan biliyorsan atlayabilirsin:
 
     ../.env/bin/python -m navstation --port /dev/cu.usbserial-XXXX
 
-Kumanda seri monitörü aynı anda açık olmamalı — port tek kullanıcı kabul eder.
+Port açılamazsa program çıkmaz; hatayı durum satırında gösterir ve başka bir
+port seçebilirsin.
+
+**Kumanda seri monitörü aynı anda açık olmamalı** — port tek kullanıcı kabul
+eder. `pio device monitor` açıksa "Port acilamadi" alırsın.
+
+**KES**'e basınca bağlantı kapanır, paneller sıfırlanır ve irtifa referansı
+düşer; yeniden bağlandığında irtifa sıfırı o an yakalanır. Bekleyen bir
+kalibrasyon veya DISARM onayı varsa KES pasif olur.
 
 ## Kalibrasyon
 

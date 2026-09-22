@@ -74,3 +74,33 @@ def test_returns_none_for_non_string_input():
     assert link.parse_line(None) is None
     assert link.parse_line(12345) is None
     assert link.parse_line(["$T", "1"]) is None
+
+
+def test_usable_ports_filters_bluetooth():
+    devices = [
+        "/dev/cu.Bluetooth-Incoming-Port",
+        "/dev/cu.usbserial-0001",
+        "/dev/cu.BLUETOOTH",
+    ]
+    assert link.usable_ports(devices) == ["/dev/cu.usbserial-0001"]
+
+
+def test_usable_ports_keeps_common_adapters():
+    devices = [
+        "/dev/cu.usbserial-14110",
+        "/dev/cu.SLAB_USBtoUART",
+        "/dev/ttyUSB0",
+        "/dev/ttyACM0",
+        "COM3",
+    ]
+    assert link.usable_ports(devices) == devices
+
+
+def test_usable_ports_preserves_order_and_handles_empty():
+    assert link.usable_ports([]) == []
+    assert link.usable_ports(["b", "a"]) == ["b", "a"]
+
+
+def test_available_ports_returns_a_list():
+    # Makinede port olmayabilir; sozlesme "istisna atmaz, liste doner".
+    assert isinstance(link.available_ports(), list)
