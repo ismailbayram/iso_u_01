@@ -24,8 +24,12 @@ SEGMENTS = 64
 SPHERE_SEGMENTS = 24
 
 # --- outer envelope -------------------------------------------------------
+# Wall thickness is quoted at the top of the lid; the draft eats
+# tan(5 deg) * 37 = 3.24 mm of it by the time it reaches the floor, so every
+# wall has to start thicker than that or it runs out and the pocket breaks
+# out through the outside of the shell.
 OUTER_X = (-7.0, 143.0)
-OUTER_Y = (-3.37, 138.63)
+OUTER_Y = (-6.37, 141.63)
 EDGE_R = 3.0
 PLAN_R = 14.0
 DRAFT_DEG = 5.0
@@ -34,6 +38,7 @@ DRAFT_DEG = 5.0
 CAVITY_X = (0.0, 136.0)
 CAVITY_Y = (-0.37, 135.63)
 CAVITY_R = 4.0
+MIN_WALL = 2.0
 
 FONT = FontProperties(family="DejaVu Sans", weight="bold")
 
@@ -93,13 +98,22 @@ def outer_skin(inset=0.0):
 
 
 def cavity_solid(z0, z1):
-    """The prism the PCB lives in, open at the top."""
+    """The pocket the PCB lives in, open at the top.
+
+    Clipped against the outer surface offset inward by MIN_WALL. A straight
+    prism would break out of the shell near the floor: the draft pulls the
+    outer surface in by 3.24 mm over the part's height, which is more than
+    the 3 mm the front and back walls start with, so the pocket ends up
+    outside the skin and the floor opens along both edges. Clipping tapers
+    the pocket instead, below the board where the room is not needed.
+    """
     section = mf.CrossSection(
         [rounded_rect_points(CAVITY_X[0], CAVITY_X[1],
                              CAVITY_Y[0], CAVITY_Y[1], CAVITY_R)],
         mf.FillRule.Positive,
     )
-    return mf.Manifold.extrude(section, z1 - z0).translate([0.0, 0.0, z0])
+    prism = mf.Manifold.extrude(section, z1 - z0).translate([0.0, 0.0, z0])
+    return prism ^ outer_skin(MIN_WALL)
 
 
 DISH_SPHERE_SEGMENTS = 256

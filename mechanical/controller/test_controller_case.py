@@ -169,6 +169,48 @@ def test_shell_antenna_bore_goes_right_through_the_wall(shell):
     assert (rod ^ shell).volume() == pytest.approx(0.0, abs=1.0)
 
 
+def test_shell_wall_never_runs_out(shell):
+    """Every wall stays at least MIN_WALL thick all the way to the floor.
+
+    Wall thickness is quoted at the top of the lid, but the draft takes
+    3.24 mm out of it by the floor. At 3 mm the front and back walls went
+    negative below z = -15 and the pocket broke out through the outside of
+    the shell, opening the underside along both edges.
+    """
+    mesh = geom.to_trimesh(geom.outer_skin())
+    for z in (-19.0, -18.0, -15.0, -10.0, 0.0, 10.0, 15.0):
+        boxes = datum.section_boxes(mesh, z)
+        low = [min(box[0][axis] for box in boxes) for axis in (0, 1)]
+        high = [max(box[1][axis] for box in boxes) for axis in (0, 1)]
+        assert geom.CAVITY_X[0] - low[0] >= geom.MIN_WALL - 0.05, f"left wall at z={z}"
+        assert high[0] - geom.CAVITY_X[1] >= geom.MIN_WALL - 0.05, f"right wall at z={z}"
+        assert geom.CAVITY_Y[0] - low[1] >= geom.MIN_WALL - 0.05, f"front wall at z={z}"
+        assert high[1] - geom.CAVITY_Y[1] >= geom.MIN_WALL - 0.05, f"back wall at z={z}"
+
+
+def test_shell_floor_is_closed(shell):
+    """Nothing in the pocket sees daylight downward.
+
+    Rays fired down from just above the floor, on a grid covering the whole
+    pocket, must each cross at least one surface. When the pocket broke out
+    of the skin the front and back edges of the underside were simply open,
+    and rays there left the part without touching anything. A single
+    crossing is fine: over a grip pad the ray starts inside solid.
+    """
+    mesh = geom.to_trimesh(shell)
+    xs = np.linspace(geom.CAVITY_X[0] + 1.0, geom.CAVITY_X[1] - 1.0, 21)
+    ys = np.linspace(geom.CAVITY_Y[0] + 1.0, geom.CAVITY_Y[1] - 1.0, 21)
+    grid = np.array([[x, y, datum.FLOOR_TOP_Z + 0.5] for x in xs for y in ys])
+    directions = np.tile([0.0, 0.0, -1.0], (len(grid), 1))
+    locations, ray_index, _ = mesh.ray.intersects_location(grid, directions)
+
+    open_points = []
+    for index, point in enumerate(grid):
+        if len(locations[ray_index == index]) == 0:
+            open_points.append(point[:2].round(1).tolist())
+    assert not open_points, f"floor open under {open_points[:8]}"
+
+
 def test_shell_has_no_leftover_channel_pockets(shell):
     """The old sprawling channel is gone; only the bore and the USB window.
 
