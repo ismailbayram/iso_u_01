@@ -12,7 +12,7 @@ panellerle gösterir, GY-85 kalibrasyonunu tetikler.
 
 Repo kökünden:
 
-    ./tools/run_navstation.sh
+    ./navstation
 
 Bu betik nereden çağrılırsa çağrılsın doğru dizine geçip programı başlatır.
 `navstation` bir Python paketi ve yalnız `tools/` içinden import edilebiliyor;
@@ -32,13 +32,22 @@ görünürler ama kumanda değillerdir.
 
 Portu baştan biliyorsan atlayabilirsin:
 
-    ./tools/run_navstation.sh --port /dev/cu.usbserial-XXXX
+    ./navstation --port /dev/cu.usbserial-XXXX
 
 Port açılamazsa program çıkmaz; hatayı durum satırında gösterir ve başka bir
 port seçebilirsin.
 
 **Kumanda seri monitörü aynı anda açık olmamalı** — port tek kullanıcı kabul
 eder. `pio device monitor` açıksa "Port acilamadi" alırsın.
+
+## Pencere
+
+Program **tam ekran** açılır. Yapay ufuk pencereyle birlikte büyür; gösterge
+her boyutta aynı açı aralığını gösterir.
+
+- **Esc** — tam ekrandan çık (pencere çerçevesi geri gelir, böylece
+  kapatabilirsin)
+- **F11** — tam ekranı aç/kapat
 
 **KES**'e basınca bağlantı kapanır, paneller sıfırlanır ve irtifa referansı
 düşer; yeniden bağlandığında irtifa sıfırı o an yakalanır. Bekleyen bir

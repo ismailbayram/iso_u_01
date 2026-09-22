@@ -13,9 +13,14 @@ CALIBRATION_TIMEOUT_MS = 5000
 DISARM_TIMEOUT_MS = 3000
 PORT_RESCAN_MS = 2000
 
+# Baslangic tuval boyutu; pencere tam ekran oldugunda cizim gercek tuval
+# olculerinden yeniden hesaplanir, bu sabitler yalniz ilk yerlesim icin.
 HORIZON_SIZE = 320
 HORIZON_RADIUS = 140
-PIXELS_PER_DEGREE = 3.0
+# Gostergenin kenarina denk gelen egim aci. Yaricap degistikce derece basina
+# piksel bundan turetilir, boylece ufuk her boyutta ayni orani gosterir.
+HORIZON_DEGREES_VISIBLE = 46.0
+HORIZON_MARGIN_PX = 20
 
 BG = "#101418"
 FG = "#e6edf3"
@@ -44,8 +49,18 @@ class NavStationWindow:
         self.root = tk.Tk()
         self.root.title("ISO U1 — Yer Istasyonu")
         self.root.configure(bg=BG)
+        self.root.attributes("-fullscreen", True)
+        # Tam ekranda pencere cercevesi yok; cikis yolu olmadan birakmayalim.
+        self.root.bind("<Escape>", lambda _event: self._set_fullscreen(False))
+        self.root.bind("<F11>", lambda _event: self._toggle_fullscreen())
 
         self._build_layout()
+
+    def _set_fullscreen(self, enabled: bool) -> None:
+        self.root.attributes("-fullscreen", enabled)
+
+    def _toggle_fullscreen(self) -> None:
+        self._set_fullscreen(not self.root.attributes("-fullscreen"))
 
     # -- kurulum ----------------------------------------------------------
 
@@ -60,7 +75,7 @@ class NavStationWindow:
             body, width=HORIZON_SIZE, height=HORIZON_SIZE,
             bg=BG, highlightthickness=0,
         )
-        self.canvas.pack(side="left")
+        self.canvas.pack(side="left", fill="both", expand=True)
 
         self.right = self._make_panel(body, "DURUM")
         self.right.pack(side="left", fill="y", padx=(12, 0))
@@ -448,17 +463,32 @@ class NavStationWindow:
         c = self.canvas
         c.delete("all")
 
-        cx = cy = HORIZON_SIZE / 2
-        r = HORIZON_RADIUS
+        # Olculer tuvalden okunuyor: pencere tam ekran ve gosterge onunla
+        # birlikte buyuyor, sabit bir boyut varsayilamaz.
+        width = c.winfo_width()
+        height = c.winfo_height()
+        if width < 2 or height < 2:
+            return  # tuval henuz yerlesmedi, bir sonraki karede cizilir
+
+        cx = width / 2
+        cy = height / 2
+        r = min(width, height) / 2 - HORIZON_MARGIN_PX
+        if r <= 0:
+            return
+
+        # Derece basina piksel yaricaptan turetilir; ufuk her boyutta ayni
+        # aci araligini gosterir.
+        ppd = r / HORIZON_DEGREES_VISIBLE
+        scale = r / HORIZON_RADIUS
 
         angle = math.radians(-roll)
-        offset = pitch * PIXELS_PER_DEGREE
+        offset = pitch * ppd
 
         # Ufuk cizgisinin merkezi, pitch kadar kaymis halde.
         hx = cx + offset * math.sin(angle)
         hy = cy + offset * math.cos(angle)
 
-        span = r * 3
+        span = max(width, height) * 1.5
         dx = span * math.cos(angle)
         dy = -span * math.sin(angle)
         nx = span * math.sin(angle)
@@ -478,32 +508,41 @@ class NavStationWindow:
         for step in range(-30, 31, 10):
             if step == 0:
                 continue
-            d = (pitch - step) * PIXELS_PER_DEGREE
+            d = (pitch - step) * ppd
             mx = cx + d * math.sin(angle)
             my = cy + d * math.cos(angle)
-            half = 28 if step % 20 else 44
+            half = (28 if step % 20 else 44) * scale
             c.create_line(mx - half * math.cos(angle), my + half * math.sin(angle),
                           mx + half * math.cos(angle), my - half * math.sin(angle),
                           fill=FG, width=1)
 
-        # Yuvarlak maske: tkinter'da kirpma yok, arka plan renginde bir halka ciz.
-        # Tk, cizgi kalinligini yolun iki yanina esit dagitir. Maskenin ic kenari
-        # tam HORIZON_RADIUS'ta bitmeli: yol yaricapi = R + kalinlik/2.
-        # Dis kenar (R + kalinlik) tuvalin kosesini (320*sqrt(2)/2 = 227) asmali.
-        mask_width = 200
-        mask_r = HORIZON_RADIUS + mask_width / 2
+        # Yuvarlak maske: tkinter'da kirpma yok, arka plan renginde bir halka
+        # ciziliyor. Tk cizgi kalinligini yolun iki yanina esit dagittigi icin
+        # maskenin ic kenari tam r'de bitmeli (yol yaricapi = r + kalinlik/2),
+        # dis kenari da tuvalin kosesini asmali.
+        corner = math.hypot(width, height) / 2 + 10
+        mask_width = max(corner - r, 2.0)
+        mask_r = r + mask_width / 2
         c.create_oval(cx - mask_r, cy - mask_r, cx + mask_r, cy + mask_r,
                       outline=BG, width=mask_width)
         c.create_oval(cx - r, cy - r, cx + r, cy + r, outline=DIM, width=2)
 
         # Roll gostergesi: tepede sabit ucgen ok.
-        c.create_polygon(cx, cy - r + 4, cx - 9, cy - r + 20, cx + 9, cy - r + 20,
+        c.create_polygon(cx, cy - r + 4 * scale,
+                         cx - 9 * scale, cy - r + 20 * scale,
+                         cx + 9 * scale, cy - r + 20 * scale,
                          fill=PLANE, outline="")
 
         # Sabit ucak sembolu.
-        c.create_line(cx - 50, cy, cx - 16, cy, fill=PLANE, width=3)
-        c.create_line(cx + 16, cy, cx + 50, cy, fill=PLANE, width=3)
-        c.create_oval(cx - 3, cy - 3, cx + 3, cy + 3, outline=PLANE, width=2)
+        wing_outer = 50 * scale
+        wing_inner = 16 * scale
+        dot = 3 * scale
+        c.create_line(cx - wing_outer, cy, cx - wing_inner, cy,
+                      fill=PLANE, width=3)
+        c.create_line(cx + wing_inner, cy, cx + wing_outer, cy,
+                      fill=PLANE, width=3)
+        c.create_oval(cx - dot, cy - dot, cx + dot, cy + dot,
+                      outline=PLANE, width=2)
 
 
 def _temp(centi: int) -> str:

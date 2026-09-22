@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# ISO U1 yer istasyonu. Nereden cagrilirsa cagrilsin calisir.
+# navstation bir Python paketi ve yalniz tools/ icinden import edilebiliyor;
+# bu betik oraya kendisi geciyor.
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+PY=".env/bin/python"
+if [ ! -x "$PY" ]; then
+    echo "Sanal ortam bulunamadi: $(pwd)/.env" >&2
+    echo "Kurulum adimlari: tools/navstation/README.md" >&2
+    exit 1
+fi
+
+cd tools
+exec "../$PY" -m navstation "$@"
