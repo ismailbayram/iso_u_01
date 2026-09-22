@@ -37,14 +37,21 @@ SPHERE_SEGMENTS = 24
 OUTER_X = (-7.0, 143.0)  # at the screen end, where the outline is narrowest
 OUTER_Y = (-6.37, 141.63)
 FLARE = 13.0
-EDGE_R = 3.0
+# The top edge carries a generous roll, because it is the one you see and
+# the one your hands run along. The underside only needs a break, and a
+# roll as big as the top one would eat the wall where the floor meets it.
+EDGE_R = 8.0
+BOTTOM_EDGE_R = 3.0
 PLAN_R = 14.0
 DRAFT_DEG = 5.0
 
-# The top face is a shallow barrel across X rather than a flat plate: the
-# crest runs along the centre line and the face falls away toward each
-# side. BARREL_DROP is how far it falls at the widest point of the body.
-BARREL_DROP = 2.0
+# The top face is flat. It was a shallow barrel, which looked better but
+# left the lid with no face to print on: its plan area is 25,300 mm^2 and
+# the largest flat facet on it was 1,364 mm^2, so the slicer stood the part
+# on edge, and laying it top-down left the edges 2 mm off the bed with only
+# the crest line touching. The shape it reads as now comes from the 8 mm
+# edge roll instead, which costs nothing to print.
+BARREL_DROP = 0.0
 BARREL_HALF_W = 88.0
 OUTLINE_STEPS = 24
 OUTLINE_MAX_STEP = 4.0
@@ -163,18 +170,28 @@ def outer_skin(inset=0.0):
     with X, since a cylinder along Y is exactly the hull of its own profile.
     """
     high_z = LID_TOP_Z - EDGE_R
-    low_z = SHELL_BOTTOM_Z + EDGE_R
-    # The wall is the common tangent of the two rings, so it runs parallel
-    # to the line joining their centres. The offset is therefore measured
-    # over the centre separation, not the part's full height.
-    draft = math.tan(math.radians(DRAFT_DEG)) * (high_z - low_z)
-
+    low_z = SHELL_BOTTOM_Z + BOTTOM_EDGE_R
     chain = []
     for px, py in plan_outline(EDGE_R):
         chain.append((px, py, barrel_z(px) - EDGE_R, EDGE_R - inset))
-    for px, py in plan_outline(EDGE_R + draft):
-        chain.append((px, py, low_z, EDGE_R - inset))
+    for px, py in plan_outline(bottom_ring_inset()):
+        chain.append((px, py, low_z, BOTTOM_EDGE_R - inset))
     return hull_of_spheres(chain)
+
+
+def bottom_ring_inset():
+    """How far in the bottom ring's centres sit, for a DRAFT_DEG wall.
+
+    The wall is the plane tangent to both rings. With equal radii that is
+    parallel to the line joining their centres, but these radii differ, so
+    the smaller ring has to sit further out to keep the same angle. Writing
+    the tangency condition for both rings and subtracting gives the offset
+    below; using the centre line's own angle instead would leave the wall
+    at 9.8 degrees rather than 5.
+    """
+    theta = math.radians(DRAFT_DEG)
+    height = (LID_TOP_Z - EDGE_R) - (SHELL_BOTTOM_Z + BOTTOM_EDGE_R)
+    return EDGE_R + height * math.tan(theta) - (EDGE_R - BOTTOM_EDGE_R) / math.cos(theta)
 
 
 def lowered_skin(depth):

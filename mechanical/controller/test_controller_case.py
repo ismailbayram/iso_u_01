@@ -212,7 +212,9 @@ def test_shell_wall_never_runs_out(shell):
     the shell, opening the underside along both edges.
     """
     mesh = geom.to_trimesh(geom.outer_skin())
-    for z in (-19.0, -18.0, -15.0, -10.0, 0.0, 10.0, 15.0):
+    # From the floor's top face upward: below that the pocket does not
+    # exist, and the sample would only be measuring the bottom edge roll.
+    for z in (datum.FLOOR_TOP_Z, -15.0, -10.0, 0.0, 10.0, 15.0):
         boxes = datum.section_boxes(mesh, z)
         low = [min(box[0][axis] for box in boxes) for axis in (0, 1)]
         high = [max(box[1][axis] for box in boxes) for axis in (0, 1)]
