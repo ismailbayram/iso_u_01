@@ -142,15 +142,49 @@ oturur.
 
 ### 4.2 Dış hat
 
-- Duvar: sol ve sağda **7.0 mm**, üst ve altta **3.0 mm**. Sol/sağ kalınlığı kapak vidası
-  kulelerini duvarın içinde taşımak için; böylece cep temiz bir dikdörtgen kalır ve kartın
-  kenarına hiçbir çıkıntı girmez (eski tasarımda vida kuleleri cebe 5.8 mm taşıyordu).
-- Dış gövde: **150.0 × 142.0 mm**, toplam yükseklik z = −20 … 23, yani **43 mm** (eski 59).
-  Bu ölçü kapağın üst yüzünde geçerli; 5°'lik eğim yüzünden aşağı inildikçe daralır, gövde
-  parçasının kendi en geniş kesiti (z = 11) 148.4 mm'dir.
+**Plan silueti dikdörtgen değil.** Kart kare diye kutunun da kare olması gerekmiyor; kart
+yalnızca cebi belirliyor, cep de yalnızca dar ucu. Dış hat ekran ucunda en dar halinde,
+kullanıcıya doğru karesel bir eğriyle açılıyor (`FLARE` = 13.0, her yana):
+
+| y | Genişlik |
+|---|---|
+| 135 (ekran ucu) | 148.9 |
+| 100 | 152.2 |
+| 60 | 158.2 |
+| 20 | 168.1 |
+
+- Duvar: ekran ucunda sol/sağ **7.0 mm**, ön/arka **6.0 mm**; kanat açıldıkça yanlar
+  kalınlaşıyor. Sol/sağ kalınlığı kapak vidası kulelerini taşımak için.
+- Dış gövde ekran ucunda **150.0 mm**, en geniş yerinde **~170 mm**; derinlik 148.0 mm;
+  toplam yükseklik z = −20 … 23, yani **43 mm** (eski 59).
 - Plan köşeleri **R14**.
-- Yan duvarlar aşağı doğru **5° içe eğimli** (draft). Kalınlık değişmez, siluet incelir.
+- Yan duvarlar aşağı doğru **5° içe eğimli** (draft).
 - Üst ve alt kenarlar **R3** yuvarlatılmış.
+
+**Duvar kalınlığı eğimden kalın olmak zorunda.** Kalınlık kapağın üst yüzünde ölçülür, ama
+eğim 43 mm boyunca her duvardan tan(5°) × 37 = **3.24 mm** yer. İlk uygulamada ön/arka
+duvar 3.0 mm'den başlıyordu ve z = −15'in altında tükeniyordu: cep kabuğun dışına çıkıp
+tabanı iki kenardan açıyordu. `cavity_solid` ayrıca kabuğa kırpılıyor, böylece sayı ne
+olursa olsun duvar `MIN_WALL` = 2.0'ın altına inemez.
+
+### 4.2.1 Fıçı üst yüzey
+
+Üst yüzey düz plaka değil; orta çizgisinde tepesi olan sığ bir fıçı. Tepe z = 23'te,
+kenarlara doğru **2.0 mm** iniyor (`BARREL_DROP`, yarı genişlik 88 mm üzerinden karesel).
+
+Bunun iki sonucu var:
+
+1. **Kapak sabit kalınlıkta kabuk olmak zorunda.** Alt yüzü sabit düzlemde duran bir plaka,
+   fıçı o düzlemin altına indiği yerde sıfıra iniyor — ve bu, cebin kendi genişliği içinde
+   oluyor. Kapak artık her yerde 2.0 mm.
+2. **Üst yüzdeki her detay yüzeyi izlemek zorunda.** Sabit düzleme kesilen bir cep bir uçta
+   kenardan taşıyor, öbür uçta yüzeye hiç değmiyor. Ekran paneli, gömme yazı ve vida
+   havşaları artık *kendi derinliği kadar aşağı indirilmiş kabuktan* çıkarılarak kesiliyor
+   (`lowered_skin(depth)`); derinlik yüzey nereye giderse gitsin sabit kalıyor.
+
+   Kabuğu içeri ofsetleyip kesişim almak yanlış: o zaman yan yüzeyler de tıraşlanıyor ve
+   kenara yakın bir detay — örneğin vida havşası — geçerken duvardan ince bir dilim
+   koparıyor. Uygulamada kapağı 19 parçaya böldü.
 
 Geometri, üst ve alt dış hat boyunca dizilmiş r = 3 mm küre kümesinin dışbükey kabuğu
 (`Manifold.batch_hull`) olarak kurulur: taper, R14 plan köşesi ve R3 kenar yuvarlaması tek
@@ -237,30 +271,27 @@ Kapak tarafı:
 - Geometri: kavis boyunca dizilmiş 5 kürenin dışbükey kabuğu, **z = −20 düzleminde
   kesilmiş**. Kesme düzlemi gövdenin dış taban yüzeyi; kabzanın gövdeye bakan yüzü böylece
   **düz** olur.
-- Kabza **aşağı ve kullanıcıya doğru** iner, yana açılmaz. İlk denemede zincir yana
-  açılıyordu ve önizlemede kabzalar tutamak değil kanat gibi okunuyordu; ayrıca tablada
-  gereksiz yer kaplıyordu.
+- Kabza gövdenin **ön köşesinin altına** oturur ve ön dudağın altına kıvrılır. Gövdenin
+  ortasına alınırsa ayak gibi okunuyor; köşeye alınınca kanatlı gövdenin aşağı devamı gibi.
 - Sol kabza küre zinciri (merkez x, y, z ve yarıçap, D çerçevesinde):
 
   | x | y | z | r |
   |---|---|---|---|
-  | 28.0 | 14.0 | −18.0 | 20.0 |
-  | 22.0 | 4.0 | −20.0 | 18.0 |
-  | 16.0 | −6.0 | −22.0 | 16.0 |
-  | 10.0 | −15.0 | −24.0 | 14.0 |
-  | 3.0 | −24.0 | −27.0 | 11.0 |
+  | 14.0 | 14.0 | −14.0 | 24.0 |
+  | 11.0 | 6.0 | −23.0 | 15.0 |
+  | 8.0 | −1.0 | −27.0 | 11.0 |
+  | 5.0 | −8.0 | −30.0 | 8.0 |
+  | 2.0 | −15.0 | −32.0 | 6.0 |
 
   Sağ kabza bu zincirin x = 68.0 düzlemine göre aynası (x' = 136.0 − x).
-- Sonuçlanan sınırlar: en alçak nokta **z = −38**, en dış nokta **x = −8** (sağda 144).
-  Kapağın kenarı x = −7'de olduğu için kabza siluetin yalnızca 1 mm dışına taşar.
-  Kabzalarla toplam genişlik **152 mm**, toplam yükseklik **61 mm**.
-- Kabza Y'de y = −35'e kadar uzanır, yani gövdenin ön kenarından 32 mm ileri. Lobun uzun
-  ekseni Y'dedir; el oraya sarılır.
-- Kesit çapı kökte 40 mm, uçta 22 mm; gövdenin altından ölçülen derinlik 18 mm.
+- Zincirin yalnız ilk üç küresi z = −20 kesme düzlemine ulaşır, kalanı altında kalır. Düz
+  kök yüzünün parçanın önünde bir raf gibi yayılmasını engelleyen budur.
+- Sonuçlanan sınırlar: en alçak nokta **z = −38**, kök çapı **46.5 mm**; gövdenin altından
+  ölçülen derinlik 18 mm, toplam yükseklik **61 mm**.
 - Duvar 2.5 mm, içi boş (dış kabuk ile yarıçapları 2.5 mm küçültülmüş iç kabuk arasındaki
   fark), gövdeye bakan yüzü açık.
 - **Fileto yok.** Kabza ayrı parça olduğu için gövde ile arasında düz bir ayrım çizgisi
-  kalır. Geçişin sert görünmemesi için zincirin kök küresi en büyük (r = 16) seçilmiştir;
+  kalır. Geçişin sert görünmemesi için zincirin kök küresi en büyük (r = 24) seçilmiştir;
   lob birleşme yerinde en geniş halindedir.
 
 ### 6.1 Bağlantı
@@ -271,8 +302,8 @@ derinlik 7 mm.
 
 | Parça | Vida 1 | Vida 2 |
 |---|---|---|
-| Sol kabza | (12.0, 9.0) | (40.0, 16.0) |
-| Sağ kabza | (124.0, 9.0) | (96.0, 16.0) |
+| Sol kabza | (6.0, 10.0) | (24.0, 20.0) |
+| Sağ kabza | (130.0, 10.0) | (112.0, 20.0) |
 
 İkisi de kabzanın z = −20'deki düz kök izinin ve gövdenin taban yüzeyinin ortak alanı
 içindedir. Y değerleri kasıtlı olarak 9'dan küçük değil: gövdenin düz alt yüzü, yuvarlatılmış
