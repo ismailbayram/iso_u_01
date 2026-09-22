@@ -273,12 +273,28 @@ def test_grip_stays_below_the_shell(grips, side):
     assert low_z == pytest.approx(-38.0, abs=0.5)
 
 
-def test_grips_reach_the_specified_width(grips):
+def test_grips_stay_inside_the_body_silhouette(grips):
+    """Grips hang down and forward, not out to the side.
+
+    Splayed sideways they read as wings rather than handles, and they widen
+    the footprint on the bed for nothing. Half a millimetre of overhang past
+    the lid's edge is the outward flare, and all of it.
+    """
     low_x = grips["left"].bounding_box()[0]
     high_x = grips["right"].bounding_box()[3]
-    assert low_x == pytest.approx(-25.0, abs=0.5)
-    assert high_x == pytest.approx(161.0, abs=0.5)
-    assert high_x - low_x == pytest.approx(186.0, abs=1.0)
+    assert low_x == pytest.approx(-8.0, abs=0.5)
+    assert high_x == pytest.approx(144.0, abs=0.5)
+    assert high_x - low_x == pytest.approx(152.0, abs=1.0)
+    assert low_x >= geom.OUTER_X[0] - 1.5
+    assert high_x <= geom.OUTER_X[1] + 1.5
+
+
+def test_grips_run_forward_toward_the_user(grips):
+    """The lobe's length is in Y, which is where the hand actually wraps."""
+    for grip in grips.values():
+        low_x, low_y, _, high_x, high_y, _ = grip.bounding_box()
+        assert low_y == pytest.approx(-35.0, abs=0.5)
+        assert high_y - low_y > high_x - low_x
 
 
 def test_grips_are_mirror_images(grips):
@@ -346,3 +362,31 @@ def test_shim_is_open_on_the_header_edge():
                      case.SHIM_OUTER[1] / 2 - case.SHIM_RIM,
                      0.0, case.SHIM_NOMINAL_H)
     assert (probe ^ shim).volume() == pytest.approx(0.0, abs=0.5)
+
+
+def test_check_against_old_reports_no_problems():
+    assert case.check_against_old() == []
+
+
+def test_cli_writes_every_part(tmp_path):
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "controller_case.py", "--out", str(tmp_path), "--check"],
+        cwd=str(Path(case.__file__).parent),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    expected = {
+        "controller_shell.stl",
+        "controller_lid.stl",
+        "controller_grip_left.stl",
+        "controller_grip_right.stl",
+        "screen_shim_133.stl",
+        "screen_shim_138.stl",
+        "screen_shim_143.stl",
+        "controller_case_preview.png",
+    }
+    assert expected <= {path.name for path in tmp_path.iterdir()}

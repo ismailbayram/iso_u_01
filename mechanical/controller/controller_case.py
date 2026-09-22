@@ -74,12 +74,14 @@ LID_TEXT_POS = (68.0, 20.0)
 
 # --- grips ----------------------------------------------------------------
 # (x, y, z, radius); hulled together, then cut off at the shell's underside.
+# Runs down and toward the user rather than out to the side, so the grips
+# stay inside the body's silhouette instead of reading as wings.
 GRIP_CHAIN_LEFT = (
-    (30.0, 14.0, -22.0, 16.0),
-    (20.0, 3.0, -24.0, 14.0),
-    (8.0, -8.0, -26.0, 12.0),
-    (-5.0, -17.0, -28.0, 10.0),
-    (-17.0, -25.0, -30.0, 8.0),
+    (28.0, 14.0, -18.0, 20.0),
+    (22.0, 4.0, -20.0, 18.0),
+    (16.0, -6.0, -22.0, 16.0),
+    (10.0, -15.0, -24.0, 14.0),
+    (3.0, -24.0, -27.0, 11.0),
 )
 GRIP_MIRROR_X = 136.0
 GRIP_WALL = 2.5
@@ -242,3 +244,132 @@ def build_shim(height):
     lip -= box(-half_x, half_x, -half_y - 1.0, half_y,
                height - 1.0, height + SHIM_LIP_H + 1.0)
     return shim + lip
+
+
+def parts():
+    """Every printable part, keyed by output file stem."""
+    built = {
+        "controller_shell": build_shell(),
+        "controller_lid": build_lid(),
+        "controller_grip_left": build_grip("left"),
+        "controller_grip_right": build_grip("right"),
+    }
+    for height in SHIM_HEIGHTS:
+        built["screen_shim_%03d" % round(height * 10)] = build_shim(height)
+    return built
+
+
+def check_against_old():
+    """Compare the new parts with the old ones; returns a list of problems."""
+    problems = []
+    old_shell_path = datum.OLD_DIR / "kumanda_alt.stl"
+    old_lid_path = datum.OLD_DIR / "kumanda_ust.stl"
+
+    measured_posts = datum.measure_old_shell(old_shell_path)["posts"]
+    for got, want in zip(measured_posts, sorted(datum.BOARD_POSTS)):
+        if math.dist(got, want) > 0.10:
+            problems.append("post %s drifted from %s" % (got, want))
+
+    measured_lid = datum.measure_old_lid(old_lid_path)
+    for got, want in zip(measured_lid["sticks"], sorted(datum.STICK_OLD)):
+        if abs(got[0] - want[0]) > 0.30:
+            problems.append("stick X %s drifted from %s" % (got, want))
+    for key in ("screen_bore", "screen_shoulder"):
+        got = measured_lid[key]
+        if got is None or math.dist(got, datum.SCREEN_CENTER) > 0.30:
+            problems.append("%s at %s, expected %s" % (key, got, datum.SCREEN_CENTER))
+
+    shell = build_shell()
+    lid = build_lid()
+    old_solid = datum.to_manifold(datum.load_old(old_shell_path))
+    opening = box(*datum.CHANNEL_REGION) - old_solid
+    for name, solid in (("shell", shell), ("lid", lid)):
+        blocked = (opening ^ solid).volume()
+        if blocked > 1.0:
+            problems.append("%s blocks %.1f mm^3 of the antenna channel"
+                            % (name, blocked))
+
+    for old_x, old_y in datum.STICK_OLD:
+        old_bore = cyl(datum.STICK_OLD_D, 6.0, old_x, old_y,
+                       datum.LID_PLATE_BOTTOM_Z - 1.0)
+        blocked = (old_bore ^ lid).volume()
+        if blocked > 1.0:
+            problems.append("lid blocks %.1f mm^3 of the old stick bore at "
+                            "(%.2f, %.2f)" % (blocked, old_x, old_y))
+    return problems
+
+
+PREVIEW_SIZE = (1400, 1000)
+PREVIEW_VIEWS = (
+    ("top", (0.0, 0.0)),
+    ("front", (-75.0, 0.0)),
+    ("corner", (-60.0, 35.0)),
+)
+PREVIEW_LIGHT = (-0.35, 0.45, 0.82)
+
+
+def render_preview(built, path):
+    """Three flat-shaded views, drawn back to front with Pillow."""
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGB", PREVIEW_SIZE, (28, 30, 34))
+    draw = ImageDraw.Draw(image)
+    scene = trimesh.util.concatenate([geom.to_trimesh(s) for s in built.values()])
+    panel_w = PREVIEW_SIZE[0] // len(PREVIEW_VIEWS)
+
+    for index, (_, (pitch, yaw)) in enumerate(PREVIEW_VIEWS):
+        rotated = scene.copy()
+        rotated.apply_transform(trimesh.transformations.euler_matrix(
+            math.radians(pitch), math.radians(yaw), 0.0))
+        vertices = rotated.vertices
+        faces = rotated.faces
+        span = max(np.ptp(vertices[:, 0]), np.ptp(vertices[:, 1]))
+        scale = 0.8 * min(panel_w, PREVIEW_SIZE[1]) / span
+        centre = vertices.mean(axis=0)
+        screen = (vertices[:, :2] - centre[:2]) * [scale, -scale] + [
+            panel_w * (index + 0.5), PREVIEW_SIZE[1] / 2]
+
+        normals = rotated.face_normals
+        depth = vertices[faces][:, :, 2].mean(axis=1)
+        # Off-axis light; shading straight off the Z component would leave
+        # every up-facing surface the same flat tone and hide the relief.
+        light = np.array(PREVIEW_LIGHT) / np.linalg.norm(PREVIEW_LIGHT)
+        shade = np.clip(0.18 + 0.82 * np.abs(normals @ light), 0.0, 1.0)
+        for face_index in np.argsort(depth):
+            level = int(40 + 190 * shade[face_index])
+            draw.polygon([tuple(screen[v]) for v in faces[face_index]],
+                         fill=(level, level, min(255, level + 12)))
+    image.save(path)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out", type=Path, default=Path(__file__).parent,
+                        help="directory the STLs and the preview are written to")
+    parser.add_argument("--check", action="store_true",
+                        help="verify the carried-over features against the old case")
+    args = parser.parse_args()
+    args.out.mkdir(parents=True, exist_ok=True)
+
+    built = parts()
+    for name, solid in built.items():
+        mesh = geom.to_trimesh(solid)
+        path = args.out / ("%s.stl" % name)
+        mesh.export(path)
+        print("wrote %s  volume=%.0f mm^3  watertight=%s  bodies=%d"
+              % (path.name, solid.volume(), mesh.is_watertight, mesh.body_count))
+
+    render_preview(built, args.out / "controller_case_preview.png")
+    print("wrote controller_case_preview.png")
+
+    if args.check:
+        problems = check_against_old()
+        for problem in problems:
+            print("CHECK FAILED: %s" % problem)
+        if problems:
+            raise SystemExit(1)
+        print("check passed: every carried-over feature is where it was")
+
+
+if __name__ == "__main__":
+    main()
