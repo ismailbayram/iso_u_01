@@ -70,7 +70,7 @@ SCREEN_PANEL_DEPTH = 1.0
 
 LID_SCREW_CLEAR_D = 2.4
 LID_SCREW_HEAD_D = 4.5
-LID_SCREW_HEAD_DEPTH = 1.0
+LID_SCREW_HEAD_DEPTH = 0.6  # shallow: the shell under the head is only 2 mm
 
 # The screws nearest the screen end sit in the 8 mm edge roll, where the
 # top face falls away by 1.7 mm across a single screw head. A recess there
@@ -78,7 +78,12 @@ LID_SCREW_HEAD_DEPTH = 1.0
 # raised pad to sit on instead: flat, proud of the roll, and the same on
 # all four so they read as a detail rather than a patch.
 LID_PAD_D = 8.0
-LID_PAD_PROUD = 0.4
+# Flush with the top face, not proud of it. Standing 0.4 mm up, the four
+# pads became the only thing touching the bed when the lid was laid
+# top-down, holding its 14,688 mm^2 flat face clear of the plate. Flush,
+# they still give the two screws in the edge roll something flat to sit
+# on, because there the pad fills the roll up to the top plane.
+LID_PAD_PROUD = 0.0
 
 LID_TEXT = "ISO U1"
 LID_TEXT_SIZE = 10.0
@@ -184,10 +189,12 @@ def build_shell():
     for x, y in GRIP_SCREWS["left"] + GRIP_SCREWS["right"]:
         cuts += cyl(GRIP_PILOT_D, GRIP_PILOT_DEPTH + 1.0, x, y,
                     datum.SHELL_BOTTOM_Z - 1.0)
+    # Mirrored: this face is read from below, so glyphs cut the right way
+    # round in model space come out backwards on the part.
     cuts += geom.text_solid(SHELL_TEXT, SHELL_TEXT_SIZE,
                             SHELL_TEXT_POS[0], SHELL_TEXT_POS[1],
                             datum.SHELL_BOTTOM_Z - 0.01,
-                            datum.SHELL_BOTTOM_Z + TEXT_DEPTH)
+                            datum.SHELL_BOTTOM_Z + TEXT_DEPTH, mirrored=True)
 
     # See build_lid: one union, not a chain, or manifold3d's batched
     # evaluation leaves stray coplanar faces across the openings.

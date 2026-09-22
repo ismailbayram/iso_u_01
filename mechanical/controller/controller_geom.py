@@ -250,12 +250,19 @@ def spherical_dish(x, y, top_z, diameter, depth):
     return cap + cyl(diameter, 5.0, x, y, top_z)
 
 
-def text_solid(text, size, x, y, z0, z1, align="center"):
-    """Extruded glyph outlines, centred on (x, y) when align is "center"."""
+def text_solid(text, size, x, y, z0, z1, align="center", mirrored=False):
+    """Extruded glyph outlines, centred on (x, y) when align is "center".
+
+    `mirrored` flips the glyphs across X, for lettering cut into a face
+    that is read from below. The shell's underside needs it: cut the right
+    way round in model space, it comes out backwards on the printed part.
+    """
     path = TextPath((0, 0), text, size=size, prop=FONT)
     polygons = [[tuple(point) for point in polygon] for polygon in path.to_polygons()]
     section = mf.CrossSection(polygons, mf.FillRule.EvenOdd)
     solid = mf.Manifold.extrude(section, z1 - z0).translate([0.0, 0.0, z0])
+    if mirrored:
+        solid = solid.mirror([1.0, 0.0, 0.0])
     low_x, low_y, _, high_x, high_y, _ = solid.bounding_box()
     if align == "center":
         return solid.translate([x - (low_x + high_x) / 2, y - (low_y + high_y) / 2, 0.0])
