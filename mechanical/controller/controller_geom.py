@@ -102,22 +102,24 @@ def cavity_solid(z0, z1):
     return mf.Manifold.extrude(section, z1 - z0).translate([0.0, 0.0, z0])
 
 
-def spherical_dish(x, y, top_z, diameter, depth, steps=16):
+DISH_SPHERE_SEGMENTS = 256
+
+
+def spherical_dish(x, y, top_z, diameter, depth):
     """A shallow spherical cap to subtract from a face at `top_z`.
 
-    Built as the hull of a stack of discs following the sphere's profile,
-    which keeps the mesh small: a true sphere of the required radius would
-    need thousands of segments to stay smooth over this little cap.
+    Cut from a real sphere rather than hulled from a stack of discs. The
+    hulled version produced a solid that looked right and measured right,
+    but subtracting it from a plate that already had a hole through it left
+    a stray face roofing the hole over — invisible to any volume check,
+    fatal on the printer. The sphere is large and coarsely faceted, but
+    over a cap this shallow the chord error is under 0.02 mm.
     """
     radius = ((diameter / 2) ** 2 + depth ** 2) / (2 * depth)
-    centre_z = top_z - depth + radius
-    discs = []
-    for step in range(steps + 1):
-        z = top_z - depth + depth * step / steps
-        r = math.sqrt(max(radius ** 2 - (centre_z - z) ** 2, 0.0))
-        discs.append(cyl(max(2 * r, 0.05), 0.02, x, y, z))
-    discs.append(cyl(diameter, 0.02, x, y, top_z + 5.0))
-    return mf.Manifold.batch_hull(discs)
+    ball = mf.Manifold.sphere(radius, DISH_SPHERE_SEGMENTS).translate(
+        [x, y, top_z - depth + radius])
+    cap = ball ^ cyl(diameter, 4 * radius, x, y, top_z - depth)
+    return cap + cyl(diameter, 5.0, x, y, top_z)
 
 
 def text_solid(text, size, x, y, z0, z1, align="center"):

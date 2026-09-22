@@ -109,10 +109,29 @@ def shell_outer_surface():
     return (geom.outer_skin() ^ below) + (geom.outer_skin(SKIRT_T + SKIRT_GAP) ^ rebate)
 
 
-def antenna_channel():
-    """The void the old shell left for the antenna and the USB cable."""
-    old = datum.to_manifold(datum.load_old(datum.OLD_DIR / "kumanda_alt.stl"))
-    return (box(*datum.CHANNEL_REGION) - old) + box(*datum.CHANNEL_EXTENSION)
+WALL_CUT_Y = (130.0, 145.0)  # spans the top wall from inside the cavity to clear
+
+
+def antenna_hole():
+    """The bore the SMA's antenna passes through, along Y in the top wall."""
+    x, z = datum.ANTENNA_CENTER
+    length = WALL_CUT_Y[1] - WALL_CUT_Y[0]
+    return (mf.Manifold.cylinder(length, datum.ANTENNA_D / 2, datum.ANTENNA_D / 2,
+                                 geom.SEGMENTS)
+            .rotate([-90.0, 0.0, 0.0])
+            .translate([x, WALL_CUT_Y[0], z]))
+
+
+def usb_slot():
+    """A rectangular window in the top wall for the micro-USB cable.
+
+    The old case ran the cable out through the same sprawling channel as
+    the antenna; this is the part of it that still has to be there, cut to
+    the connector's own footprint.
+    """
+    return box(datum.USB_SLOT_X[0], datum.USB_SLOT_X[1],
+               WALL_CUT_Y[0], WALL_CUT_Y[1],
+               datum.USB_SLOT_Z[0], datum.USB_SLOT_Z[1])
 
 
 def build_shell():
@@ -135,23 +154,24 @@ def build_shell():
                     x, y, datum.SHELL_BOTTOM_Z)
     shell += pads ^ outer
 
-    shell -= antenna_channel()
-
+    cuts = antenna_hole() + usb_slot()
     for x, y in datum.BOARD_POSTS:
-        shell -= cyl(datum.POST_PILOT_D, datum.POST_PILOT_DEPTH + 1.0, x, y,
-                     datum.BOARD_SEAT_Z - datum.POST_PILOT_DEPTH)
+        cuts += cyl(datum.POST_PILOT_D, datum.POST_PILOT_DEPTH + 1.0, x, y,
+                    datum.BOARD_SEAT_Z - datum.POST_PILOT_DEPTH)
     for x, y in LID_SCREWS:
-        shell -= cyl(LID_SCREW_PILOT_D, LID_SCREW_PILOT_DEPTH + 1.0, x, y,
-                     datum.WALL_TOP_Z - LID_SCREW_PILOT_DEPTH)
+        cuts += cyl(LID_SCREW_PILOT_D, LID_SCREW_PILOT_DEPTH + 1.0, x, y,
+                    datum.WALL_TOP_Z - LID_SCREW_PILOT_DEPTH)
     for x, y in GRIP_SCREWS["left"] + GRIP_SCREWS["right"]:
-        shell -= cyl(GRIP_PILOT_D, GRIP_PILOT_DEPTH + 1.0, x, y,
-                     datum.SHELL_BOTTOM_Z - 1.0)
+        cuts += cyl(GRIP_PILOT_D, GRIP_PILOT_DEPTH + 1.0, x, y,
+                    datum.SHELL_BOTTOM_Z - 1.0)
+    cuts += geom.text_solid(SHELL_TEXT, SHELL_TEXT_SIZE,
+                            SHELL_TEXT_POS[0], SHELL_TEXT_POS[1],
+                            datum.SHELL_BOTTOM_Z - 0.01,
+                            datum.SHELL_BOTTOM_Z + TEXT_DEPTH)
 
-    shell -= geom.text_solid(SHELL_TEXT, SHELL_TEXT_SIZE,
-                             SHELL_TEXT_POS[0], SHELL_TEXT_POS[1],
-                             datum.SHELL_BOTTOM_Z - 0.01,
-                             datum.SHELL_BOTTOM_Z + TEXT_DEPTH)
-    return shell
+    # See build_lid: one union, not a chain, or manifold3d's batched
+    # evaluation leaves stray coplanar faces across the openings.
+    return shell - cuts
 
 
 def _centred_box(centre, size, z0, z1):
@@ -167,30 +187,34 @@ def build_lid():
     lid = (geom.outer_skin() ^ band) - (geom.outer_skin(SKIRT_T) ^ hollow)
 
     # Overlaps the plate by 0.5 mm; a coplanar union would be degenerate.
-    collar = _centred_box(datum.SCREEN_CENTER, COLLAR_OUTER,
-                          datum.WALL_TOP_Z, datum.LID_PLATE_BOTTOM_Z + 0.5)
-    lid += collar
-    lid -= _centred_box(datum.SCREEN_CENTER, SCREEN_NEST,
+    lid += _centred_box(datum.SCREEN_CENTER, COLLAR_OUTER,
+                        datum.WALL_TOP_Z, datum.LID_PLATE_BOTTOM_Z + 0.5)
+
+    cuts = _centred_box(datum.SCREEN_CENTER, SCREEN_NEST,
                         datum.WALL_TOP_Z - 1.0, SCREEN_NEST_TOP_Z)
-    lid -= _centred_box(datum.SCREEN_CENTER, SCREEN_WINDOW,
-                        SCREEN_NEST_TOP_Z, datum.LID_TOP_Z + 1.0)
-    lid -= _centred_box(datum.SCREEN_CENTER, SCREEN_PANEL,
-                        datum.LID_TOP_Z - SCREEN_PANEL_DEPTH, datum.LID_TOP_Z + 1.0)
+    cuts += _centred_box(datum.SCREEN_CENTER, SCREEN_WINDOW,
+                         SCREEN_NEST_TOP_Z, datum.LID_TOP_Z + 1.0)
+    cuts += _centred_box(datum.SCREEN_CENTER, SCREEN_PANEL,
+                         datum.LID_TOP_Z - SCREEN_PANEL_DEPTH, datum.LID_TOP_Z + 1.0)
 
     for x, y in STICK_NEW:
-        lid -= cyl(STICK_BORE_D, 8.0, x, y, datum.LID_PLATE_BOTTOM_Z - 2.0)
-        lid -= geom.spherical_dish(x, y, datum.LID_TOP_Z, DISH_D, DISH_DEPTH)
+        cuts += cyl(STICK_BORE_D, 8.0, x, y, datum.LID_PLATE_BOTTOM_Z - 2.0)
+        cuts += geom.spherical_dish(x, y, datum.LID_TOP_Z, DISH_D, DISH_DEPTH)
 
     for x, y in LID_SCREWS:
-        lid -= cyl(LID_SCREW_CLEAR_D, 6.0, x, y, datum.LID_PLATE_BOTTOM_Z - 1.0)
-        lid -= cyl(LID_SCREW_HEAD_D, LID_SCREW_HEAD_DEPTH + 1.0, x, y,
-                   datum.LID_TOP_Z - LID_SCREW_HEAD_DEPTH)
+        cuts += cyl(LID_SCREW_CLEAR_D, 6.0, x, y, datum.LID_PLATE_BOTTOM_Z - 1.0)
+        cuts += cyl(LID_SCREW_HEAD_D, LID_SCREW_HEAD_DEPTH + 1.0, x, y,
+                    datum.LID_TOP_Z - LID_SCREW_HEAD_DEPTH)
 
-    lid -= antenna_channel()
-    lid -= box(*datum.CABLE_SLOT)
-    lid -= geom.text_solid(LID_TEXT, LID_TEXT_SIZE, LID_TEXT_POS[0], LID_TEXT_POS[1],
-                           datum.LID_TOP_Z - TEXT_DEPTH, datum.LID_TOP_Z + 0.01)
-    return lid
+    cuts += usb_slot()
+    cuts += geom.text_solid(LID_TEXT, LID_TEXT_SIZE, LID_TEXT_POS[0], LID_TEXT_POS[1],
+                            datum.LID_TOP_Z - TEXT_DEPTH, datum.LID_TOP_Z + 0.01)
+
+    # One subtraction, not a chain of them. manifold3d evaluates lazily, and
+    # a long chain of differences batches into a single pass that leaves
+    # stray coplanar faces behind — a 1010 mm^2 triangle roofed over the
+    # right stick bore. Unioning the negatives first avoids the whole class.
+    return lid - cuts
 
 
 def grip_chain(side):
@@ -279,15 +303,47 @@ def check_against_old():
         if got is None or math.dist(got, datum.SCREEN_CENTER) > 0.30:
             problems.append("%s at %s, expected %s" % (key, got, datum.SCREEN_CENTER))
 
+    measured_antenna = datum.measure_old_antenna(old_shell_path)
+    if measured_antenna is None:
+        problems.append("no antenna bore found in the old shell")
+    else:
+        drift = math.dist(measured_antenna["centre"], datum.ANTENNA_CENTER)
+        if drift > 0.05:
+            problems.append("antenna bore at %s, expected %s"
+                            % (measured_antenna["centre"], datum.ANTENNA_CENTER))
+        if abs(measured_antenna["diameter"] - datum.ANTENNA_D_OLD) > 0.05:
+            problems.append("antenna bore is %.3f wide, expected %.3f"
+                            % (measured_antenna["diameter"], datum.ANTENNA_D_OLD))
+
     shell = build_shell()
     lid = build_lid()
-    old_solid = datum.to_manifold(datum.load_old(old_shell_path))
-    opening = box(*datum.CHANNEL_REGION) - old_solid
+
+    rod_x, rod_z = datum.ANTENNA_CENTER
+    rod = (mf.Manifold.cylinder(15.0, datum.ANTENNA_D / 2, datum.ANTENNA_D / 2,
+                                geom.SEGMENTS)
+           .rotate([-90.0, 0.0, 0.0])
+           .translate([rod_x, WALL_CUT_Y[0], rod_z]))
+    blocked = (rod ^ shell).volume()
+    if blocked > 1.0:
+        problems.append("shell blocks %.1f mm^3 of the antenna bore" % blocked)
+
     for name, solid in (("shell", shell), ("lid", lid)):
-        blocked = (opening ^ solid).volume()
+        plug = box(datum.USB_SLOT_X[0], datum.USB_SLOT_X[1],
+                   WALL_CUT_Y[0], WALL_CUT_Y[1], 0.0, 8.0)
+        blocked = (plug ^ solid).volume()
         if blocked > 1.0:
-            problems.append("%s blocks %.1f mm^3 of the antenna channel"
+            problems.append("%s blocks %.1f mm^3 of the USB window"
                             % (name, blocked))
+
+    lid_mesh = geom.to_trimesh(lid)
+    origins = np.array([[x, y, 40.0] for x, y in STICK_NEW])
+    directions = np.tile([0.0, 0.0, -1.0], (len(origins), 1))
+    locations, ray_index, _ = lid_mesh.ray.intersects_location(origins, directions)
+    for index, (x, y) in enumerate(STICK_NEW):
+        hits = len(locations[ray_index == index])
+        if hits:
+            problems.append("lid roofs the stick bore at (%.2f, %.2f) with %d face(s)"
+                            % (x, y, hits))
 
     for old_x, old_y in datum.STICK_OLD:
         old_bore = cyl(datum.STICK_OLD_D, 6.0, old_x, old_y,

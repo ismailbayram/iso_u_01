@@ -50,11 +50,19 @@ SCREEN_CENTER = (107.44, 113.77)
 SCREEN_BORE_OLD = (37.5, 12.2)
 SCREEN_SHOULDER_OLD = (39.5, 14.2)
 
-# --- antenna / USB channel, copied as a boolean ---------------------------
-# (x0, x1, y0, y1, z0, z1)
-CHANNEL_REGION = (28.0, 108.0, 126.0, 136.07, -21.0, 24.0)
-CHANNEL_EXTENSION = (36.27, 103.94, 136.07, 145.0, -21.0, 24.0)
-CABLE_SLOT = (62.69, 74.29, 120.37, 145.0, 20.0, 24.0)
+# --- antenna bore ---------------------------------------------------------
+# A horizontal bore along Y through the top wall, below the board, for the
+# SMA connector's antenna. Measured off the old shell's cylinder wall.
+ANTENNA_CENTER = (32.993, -12.510)  # (x, z)
+ANTENNA_D_OLD = 14.007  # what the old shell actually has
+ANTENNA_D = 13.7  # what we cut; see the design spec
+
+# --- micro-USB cable opening ----------------------------------------------
+# The old case let the cable out through the same wide channel as the
+# antenna. Its lid slot is the only part of it that pins the connector
+# down, so its X range is what the new rectangular window uses.
+USB_SLOT_X = (62.69, 74.29)
+USB_SLOT_Z = (-2.0, 21.0)
 
 SECTION_Z = 19.0  # a height where the old lid's bores read at full size
 
@@ -126,3 +134,33 @@ def measure_old_lid(path):
         "screen_bore": screen_bore,
         "screen_shoulder": screen_shoulder,
     }
+
+
+def measure_old_antenna(path):
+    """Centre and diameter of the old shell's antenna bore.
+
+    The bore's wall is the one run of faces that is vertical to Y without
+    being axis aligned — a round hole sweeps through every direction, a box
+    corner does not.
+    """
+    mesh = load_old(path)
+    normals = mesh.face_normals
+    along_y = np.abs(normals[:, 1]) < 0.05
+    axis_aligned = (np.abs(normals[:, 0]) > 0.999) | (np.abs(normals[:, 2]) > 0.999)
+    candidates = np.where(along_y & ~axis_aligned)[0]
+    labels = fcluster(linkage(mesh.triangles_center[candidates], "single"), 3.0,
+                      "distance")
+
+    best = None
+    for label in np.unique(labels):
+        faces = candidates[labels == label]
+        points = np.asarray(mesh.vertices)[np.unique(mesh.faces[faces].ravel())]
+        centre_x = (points[:, 0].min() + points[:, 0].max()) / 2
+        centre_z = (points[:, 2].min() + points[:, 2].max()) / 2
+        radii = np.hypot(points[:, 0] - centre_x, points[:, 2] - centre_z)
+        if radii.max() - radii.min() > 0.05 or radii.max() < 3.0:
+            continue  # not a circle, or too small to be the antenna
+        if best is None or radii.max() > best["diameter"] / 2:
+            best = {"centre": (round(float(centre_x), 3), round(float(centre_z), 3)),
+                    "diameter": round(float(2 * radii.max()), 3)}
+    return best

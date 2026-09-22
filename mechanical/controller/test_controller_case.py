@@ -153,11 +153,42 @@ def test_shell_posts_reach_the_seating_plane(shell):
         assert min(math.dist(got, want) for want in datum.BOARD_POSTS) < 0.2
 
 
-def test_shell_keeps_the_antenna_channel_open(shell):
-    """Everything the old shell left open in the channel region stays open."""
-    old = datum.to_manifold(datum.load_old(datum.OLD_DIR / "kumanda_alt.stl"))
-    opening = geom.box(*datum.CHANNEL_REGION) - old
-    assert (opening ^ shell).volume() == pytest.approx(0.0, abs=1.0)
+def test_old_antenna_bore_matches_constants():
+    measured = datum.measure_old_antenna(OLD_SHELL)
+    assert measured["centre"][0] == pytest.approx(datum.ANTENNA_CENTER[0], abs=0.02)
+    assert measured["centre"][1] == pytest.approx(datum.ANTENNA_CENTER[1], abs=0.02)
+    assert measured["diameter"] == pytest.approx(datum.ANTENNA_D_OLD, abs=0.02)
+
+
+def test_shell_antenna_bore_goes_right_through_the_wall(shell):
+    """A rod on the old bore's axis must pass clean through the top wall."""
+    x, z = datum.ANTENNA_CENTER
+    rod = (geom.cyl(datum.ANTENNA_D, 15.0, 0.0, 0.0, 0.0)
+           .rotate([-90.0, 0.0, 0.0])
+           .translate([x, 130.0, z]))
+    assert (rod ^ shell).volume() == pytest.approx(0.0, abs=1.0)
+
+
+def test_shell_has_no_leftover_channel_pockets(shell):
+    """The old sprawling channel is gone; only the bore and the USB window.
+
+    Copying the old shell's negative carved a set of pockets into the floor
+    that served nothing — a single bore is what the antenna actually needs.
+    """
+    mesh = geom.to_trimesh(shell)
+    floor = geom.box(0.0, 136.0, 0.0, 136.0,
+                     datum.SHELL_BOTTOM_Z, datum.FLOOR_TOP_Z)
+    solid_floor = (floor ^ shell).volume()
+    # grip pads add material, pilots remove a little; the floor is otherwise
+    # a plain 2 mm slab over the cavity footprint.
+    assert solid_floor > 0.93 * floor.volume()
+
+
+def test_shell_usb_window_is_open(shell):
+    """The cable has to reach the ESP32; the window is all that is left."""
+    plug = geom.box(datum.USB_SLOT_X[0], datum.USB_SLOT_X[1],
+                    130.0, 145.0, 0.0, 8.0)
+    assert (plug ^ shell).volume() == pytest.approx(0.0, abs=1.0)
 
 
 def test_shell_has_four_lid_screw_pilots(shell):
@@ -248,10 +279,26 @@ def test_lid_top_carries_the_screen_panel_recess(lid):
     assert case.SCREEN_PANEL in sizes
 
 
-def test_lid_keeps_the_antenna_channel_open(lid):
-    old = datum.to_manifold(datum.load_old(datum.OLD_DIR / "kumanda_alt.stl"))
-    opening = geom.box(*datum.CHANNEL_REGION) - old
-    assert (opening ^ lid).volume() == pytest.approx(0.0, abs=1.0)
+def test_lid_leaves_the_usb_window_open(lid):
+    """The lid's skirt would otherwise close the top of the wall window."""
+    plug = geom.box(datum.USB_SLOT_X[0], datum.USB_SLOT_X[1], 130.0, 145.0,
+                    datum.LID_SKIRT_BOTTOM_Z, datum.LID_PLATE_BOTTOM_Z)
+    assert (plug ^ lid).volume() == pytest.approx(0.0, abs=1.0)
+
+
+def test_lid_stick_bores_are_open_to_the_sky(lid):
+    """A ray straight down each bore must hit nothing.
+
+    Volume tests cannot see this: a stray zero-thickness face roofing the
+    bore displaces nothing, but it still prints as a closed hole. One did,
+    over the right stick, when the cuts were applied as a chain.
+    """
+    mesh = geom.to_trimesh(lid)
+    origins = np.array([[x, y, 40.0] for x, y in case.STICK_NEW])
+    directions = np.tile([0.0, 0.0, -1.0], (len(origins), 1))
+    locations, ray_index, _ = mesh.ray.intersects_location(origins, directions)
+    for index in range(len(origins)):
+        assert len(locations[ray_index == index]) == 0
 
 
 @pytest.fixture(scope="module")
