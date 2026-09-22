@@ -137,8 +137,16 @@ Köşe yarıçapı 4 mm ile sınırlı: kartın köşesi cebin köşesinden (1.5
 yuvarlatma yayının merkezine 3.54 mm uzaklıkta. R6 kullanılsaydı yay kartın dört köşesini
 keserdi.
 
-Kart, 3.2'deki dört direğe (Ø5 dış, **M2 sac vidası** için Ø1.7 pilot delik, derinlik
-6 mm, üst yüz z = 0) oturur. Kart bir kez takıldığı için insert somun kullanılmıyor.
+Kart, 3.2'deki dört direğe oturur. Direkler **Ø7 dış**, içlerinde **Ø3.2 insert deliği**
+(derinlik 5 mm, z = 0 … −5), altında Ø2.4 vida ucu boşluğu; üst yüz z = 0.
+
+Kart da söküp takılacak (lehim, ekran şimi denemesi), o yüzden kapak gibi **M2 insert
+somun** kullanıyor. Direk Ø5'te kalsaydı Ø3.2 delik çevresinde 0.9 mm et kalırdı; Ø7'de
+1.9 mm kalıyor. En yakın kabza pilot deliğine 2.9 mm boşluk var.
+
+**Dikkat:** kartın kendi montaj delikleri M3 için açılmış, yani ≥ Ø3.2. M2 vida başı Ø3.8
+olduğu için delik kenarında yalnız ~0.3 mm yatak kalır — baş deliğin içine çeker. Kart
+vidalarının altına **M2 pul** gerekiyor; kartın delik çapını ölçüp doğrula.
 
 ### 4.2 Dış hat
 
@@ -219,8 +227,8 @@ birleştiren doğruya paraleldir. Tam yükseklik üzerinden hesaplanırsa duvar 
 
 4 adet **M2 vida**, gövde tarafında **ısıyla gömülen insert somun** (Ø3.5) ile. Kapak
 defalarca açılacak — kart, ekran şimi, kablo — ve plastiğe kendi dişini açan vida birkaç
-sökme-takmada sıyırır. Kutudaki diğer iki bağlantı (kart direği, kabza) bir kez takıldığı
-için düz vidayla kalıyor; böylece 10 değil 4 insert gerekiyor.
+sökme-takmada sıyırır. Kart direkleri de aynı sebeple insert kullanıyor (4.1);
+yalnız kabzalar bir kez takıldığı için düz vidayla kalıyor. Toplam **8 insert**.
 
 Kuleler sol ve sağ duvarın içinde:
 
@@ -399,8 +407,9 @@ Ayrıca geometri kontrolü: her parça su geçirmez (`is_watertight`) ve tek gö
 
 ### 8.2 Montaj sırası
 
-1. Gövdenin dört kapak kulesine 4 × M2 insert somunu havya ile gömle.
+1. **8 × M2 insert somunu** havya ile göm: 4'ü kapak kulelerine (z = 16'dan aşağı),
+   4'ü kart direklerine (z = 0'dan aşağı).
 2. `screen_shim`'i karta yapıştır, OLED modülünü üstüne bastır.
-3. Kartı gövdenin dört direğine 4 × M2 sac vidası ile tuttur.
+3. Kartı gövdenin dört direğine 4 × M2 vida + **pul** ile tuttur.
 4. Kapağı geçir, 4 × M2 ile insertlere sık.
 5. Kabzaları 2'şer M2 sac vidası ile gövdeye bağla.
