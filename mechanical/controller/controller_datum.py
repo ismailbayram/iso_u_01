@@ -39,10 +39,13 @@ LID_TOP_Z = 23.0
 
 # --- PCB mounting ---------------------------------------------------------
 BOARD_POSTS = ((11.75, 10.96), (124.74, 10.66), (12.46, 124.34), (123.04, 124.54))
-# M2 self-tapping. The board goes in once, so it does not earn an insert.
-POST_OD = 5.0
-POST_PILOT_D = 1.7
-POST_PILOT_DEPTH = 6.0
+# M2 with a heat-set insert, like the lid. The board comes out again for
+# soldering and for fitting the screen shim, so it earns one too. The post
+# grows to 7 mm because a 3.2 mm bore in a 5 mm post leaves 0.9 mm of wall.
+POST_OD = 7.0
+POST_INSERT_D = 3.2  # for a 3.5 mm insert; test one before printing four
+POST_INSERT_DEPTH = 5.0
+POST_RELIEF_D = 2.4  # somewhere for the screw's tip to go
 
 # --- features carried over from the old lid -------------------------------
 STICK_OLD = ((27.19, 50.61), (108.90, 51.39))

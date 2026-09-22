@@ -172,8 +172,10 @@ def build_shell():
 
     cuts = antenna_hole() + usb_slot()
     for x, y in datum.BOARD_POSTS:
-        cuts += cyl(datum.POST_PILOT_D, datum.POST_PILOT_DEPTH + 1.0, x, y,
-                    datum.BOARD_SEAT_Z - datum.POST_PILOT_DEPTH)
+        cuts += cyl(datum.POST_INSERT_D, datum.POST_INSERT_DEPTH + 1.0, x, y,
+                    datum.BOARD_SEAT_Z - datum.POST_INSERT_DEPTH)
+        cuts += cyl(datum.POST_RELIEF_D, 5.0, x, y,
+                    datum.BOARD_SEAT_Z - datum.POST_INSERT_DEPTH - 4.0)
     for x, y in LID_SCREWS:
         cuts += cyl(LID_SCREW_PILOT_D, LID_SCREW_PILOT_DEPTH + 1.0, x, y,
                     datum.WALL_TOP_Z - LID_SCREW_PILOT_DEPTH)
