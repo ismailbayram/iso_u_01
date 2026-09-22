@@ -298,7 +298,30 @@ def test_lid_is_a_single_watertight_body(lid):
 def test_lid_spans_the_skirt_and_the_plate(lid):
     _, _, low_z, _, _, high_z = lid.bounding_box()
     assert low_z == pytest.approx(datum.LID_SKIRT_BOTTOM_Z, abs=0.05)
-    assert high_z == pytest.approx(datum.LID_TOP_Z, abs=0.05)
+    # The screw pads stand proud of the top face; nothing else does.
+    assert high_z == pytest.approx(datum.LID_TOP_Z + case.LID_PAD_PROUD, abs=0.05)
+
+
+def test_every_screw_head_lands_on_a_flat_pad(lid):
+    """All four pads read the same, and leave the shell its thickness.
+
+    Two of the screws sit in the 8 mm edge roll, where the top face falls
+    1.7 mm across one screw head. A recess there would have cut through the
+    2 mm shell on its shallow side, so the heads sit on pads instead.
+    """
+    mesh = geom.to_trimesh(lid)
+    for x, y in case.LID_SCREWS:
+        on_pad = np.array([[x + case.LID_SCREW_HEAD_D / 2 + 1.0, y, 60.0]])
+        locations, _, _ = mesh.ray.intersects_location(
+            on_pad, np.array([[0.0, 0.0, -1.0]]))
+        assert locations[:, 2].max() == pytest.approx(
+            datum.LID_TOP_Z + case.LID_PAD_PROUD, abs=0.05), f"pad at ({x}, {y})"
+
+        under_head = np.array([[x + case.LID_SCREW_CLEAR_D / 2 + 0.3, y, 60.0]])
+        locations, _, _ = mesh.ray.intersects_location(
+            under_head, np.array([[0.0, 0.0, -1.0]]))
+        crossings = sorted(locations[:, 2], reverse=True)
+        assert crossings[0] - crossings[-1] > 1.5, f"thin under head at ({x}, {y})"
 
 
 def test_lid_skirt_clears_the_shell(shell, lid):

@@ -28,10 +28,14 @@ from controller_geom import box, cyl
 SKIRT_T = 2.0
 SKIRT_GAP = 0.2
 
+# M2 with a heat-set insert. This is the joint that gets opened again and
+# again, and a thread tapped straight into PLA gives up after a handful of
+# cycles. The other two joints are assembled once and use plain screws.
 LID_SCREWS = ((-2.5, 30.0), (-2.5, 105.0), (138.5, 30.0), (138.5, 105.0))
-LID_SCREW_BOSS_D = 6.0
-LID_SCREW_PILOT_D = 2.5
-LID_SCREW_PILOT_DEPTH = 12.0
+LID_SCREW_BOSS_D = 7.0
+LID_SCREW_PILOT_D = 3.2  # for a 3.5 mm insert; test one before printing four
+LID_SCREW_PILOT_DEPTH = 5.0
+LID_SCREW_RELIEF_D = 2.4  # somewhere for the screw's tip to go
 
 # --- grip interface -------------------------------------------------------
 # Kept clear of the rounded bottom edge: the flat underside only starts at
@@ -42,8 +46,8 @@ GRIP_SCREWS = {
 }
 GRIP_PAD_D = 10.0
 GRIP_PAD_TOP_Z = -12.0
-GRIP_PILOT_D = 2.5
-GRIP_PILOT_DEPTH = 7.0
+GRIP_PILOT_D = 1.7
+GRIP_PILOT_DEPTH = 6.0
 
 # --- lettering ------------------------------------------------------------
 TEXT_DEPTH = 0.6
@@ -64,9 +68,17 @@ SCREEN_WINDOW = (36.5, 10.5)
 SCREEN_PANEL = (46.0, 20.0)
 SCREEN_PANEL_DEPTH = 1.0
 
-LID_SCREW_CLEAR_D = 3.4
-LID_SCREW_HEAD_D = 6.0
-LID_SCREW_HEAD_DEPTH = 0.8  # the plate is only 2.0 mm thick
+LID_SCREW_CLEAR_D = 2.4
+LID_SCREW_HEAD_D = 4.5
+LID_SCREW_HEAD_DEPTH = 1.0
+
+# The screws nearest the screen end sit in the 8 mm edge roll, where the
+# top face falls away by 1.7 mm across a single screw head. A recess there
+# would cut through a 2 mm shell on its shallow side, so the head gets a
+# raised pad to sit on instead: flat, proud of the roll, and the same on
+# all four so they read as a detail rather than a patch.
+LID_PAD_D = 8.0
+LID_PAD_PROUD = 0.4
 
 LID_TEXT = "ISO U1"
 LID_TEXT_SIZE = 10.0
@@ -90,8 +102,8 @@ GRIP_CHAIN_LEFT = (
 GRIP_MIRROR_X = 136.0
 GRIP_WALL = 2.5
 GRIP_SOLID_ROOT_Z = -30.0
-GRIP_CLEAR_D = 3.4
-GRIP_HEAD_D = 6.5
+GRIP_CLEAR_D = 2.4
+GRIP_HEAD_D = 4.5
 GRIP_HEAD_Z = -30.0
 
 # --- screen shim ----------------------------------------------------------
@@ -165,6 +177,8 @@ def build_shell():
     for x, y in LID_SCREWS:
         cuts += cyl(LID_SCREW_PILOT_D, LID_SCREW_PILOT_DEPTH + 1.0, x, y,
                     datum.WALL_TOP_Z - LID_SCREW_PILOT_DEPTH)
+        cuts += cyl(LID_SCREW_RELIEF_D, 5.0, x, y,
+                    datum.WALL_TOP_Z - LID_SCREW_PILOT_DEPTH - 4.0)
     for x, y in GRIP_SCREWS["left"] + GRIP_SCREWS["right"]:
         cuts += cyl(GRIP_PILOT_D, GRIP_PILOT_DEPTH + 1.0, x, y,
                     datum.SHELL_BOTTOM_Z - 1.0)
@@ -198,6 +212,11 @@ def build_lid():
     lid += _centred_box(datum.SCREEN_CENTER, COLLAR_OUTER,
                         datum.WALL_TOP_Z, datum.LID_PLATE_BOTTOM_Z + 0.5)
 
+    pad_top = datum.LID_TOP_Z + LID_PAD_PROUD
+    for x, y in LID_SCREWS:
+        lid += cyl(LID_PAD_D, pad_top - (datum.LID_PLATE_BOTTOM_Z - 0.5),
+                   x, y, datum.LID_PLATE_BOTTOM_Z - 0.5)
+
     cuts = _centred_box(datum.SCREEN_CENTER, SCREEN_NEST,
                         datum.WALL_TOP_Z - 1.0, SCREEN_NEST_TOP_Z)
     cuts += _centred_box(datum.SCREEN_CENTER, SCREEN_WINDOW,
@@ -217,8 +236,9 @@ def build_lid():
 
     for x, y in LID_SCREWS:
         cuts += cyl(LID_SCREW_CLEAR_D, 8.0, x, y, datum.LID_PLATE_BOTTOM_Z - 3.0)
-        cuts += (cyl(LID_SCREW_HEAD_D, tall[1] - tall[0], x, y, tall[0])
-                 - geom.lowered_skin(LID_SCREW_HEAD_DEPTH))
+        # Cut into the pad, whose top is flat and known, so this stays a
+        # plain counterbore rather than something that follows the roll.
+        cuts += cyl(LID_SCREW_HEAD_D, 20.0, x, y, pad_top - LID_SCREW_HEAD_DEPTH)
 
     cuts += usb_slot()
     cuts += (geom.text_solid(LID_TEXT, LID_TEXT_SIZE, LID_TEXT_POS[0], LID_TEXT_POS[1],

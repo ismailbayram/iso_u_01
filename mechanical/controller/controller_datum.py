@@ -39,9 +39,10 @@ LID_TOP_Z = 23.0
 
 # --- PCB mounting ---------------------------------------------------------
 BOARD_POSTS = ((11.75, 10.96), (124.74, 10.66), (12.46, 124.34), (123.04, 124.54))
+# M2 self-tapping. The board goes in once, so it does not earn an insert.
 POST_OD = 5.0
-POST_PILOT_D = 2.6
-POST_PILOT_DEPTH = 8.0
+POST_PILOT_D = 1.7
+POST_PILOT_DEPTH = 6.0
 
 # --- features carried over from the old lid -------------------------------
 STICK_OLD = ((27.19, 50.61), (108.90, 51.39))
