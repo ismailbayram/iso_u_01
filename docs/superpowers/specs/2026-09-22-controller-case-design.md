@@ -127,8 +127,13 @@ Bölüm 5'teki tabla geçiyor.
 ### 4.1 İç hacim
 
 Kart cebi, direk deseninin ağırlık merkezine (68.00, 67.63) oturtulmuş **136.0 × 136.0 mm**
-kare. D çerçevesinde x = 0.0 … 136.0, y = −0.37 … 135.63. 133 mm'lik kartın çevresinde her
-yönde ≥ 1.5 mm boşluk kalır. Eski cep 132.0 × 133.7 idi ve karta göre dardı.
+kare, plan köşeleri **R4**. D çerçevesinde x = 0.0 … 136.0, y = −0.37 … 135.63. 133 mm'lik
+kartın çevresinde her yönde ≥ 1.5 mm boşluk kalır. Eski cep 132.0 × 133.7 idi ve karta göre
+dardı.
+
+Köşe yarıçapı 4 mm ile sınırlı: kartın köşesi cebin köşesinden (1.5, 1.5) içeride, yani
+yuvarlatma yayının merkezine 3.54 mm uzaklıkta. R6 kullanılsaydı yay kartın dört köşesini
+keserdi.
 
 Kart, 3.2'deki dört direğe (Ø5 dış, M3 sac vidası için Ø2.6 pilot delik, üst yüz z = 0)
 oturur.
@@ -173,7 +178,9 @@ işlemde çıkar.
 | 3 | 138.5 | 30.0 |
 | 4 | 138.5 | 105.0 |
 
-Gövde tarafı Ø6 kule + Ø2.5 pilot, kapak tarafı Ø3.4 geçme + Ø6 × 2.0 havşa. Kuleler dış
+Gövde tarafı Ø6 kule + Ø2.5 pilot, kapak tarafı Ø3.4 geçme + Ø6 × 0.8 havşa. Havşa sığ:
+kapak plakası 2.0 mm ve daha derin bir havşa plakayı tümden deler, vida başına yatak
+kalmaz. Başlar 0.8 mm gömülü durur, tam sıfır değil. Kuleler dış
 kabuğa göre kırpılır (4.2'deki küre kabuğu ile kesişim), böylece 5°'lik eğim yüzünden
 duvardan dışarı taşmazlar. Kule x merkezi cebin kenarından 2.5 mm dışarıda; Ø6 kule cebe
 0.5 mm girer, kartın kenarına 1.0 mm boşluk kalır.
