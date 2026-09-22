@@ -144,13 +144,17 @@ işlemde çıkar.
 
 | # | x | y |
 |---|---|---|
-| 1 | −3.5 | 30.0 |
-| 2 | −3.5 | 105.0 |
-| 3 | 139.5 | 30.0 |
-| 4 | 139.5 | 105.0 |
+| 1 | −2.5 | 30.0 |
+| 2 | −2.5 | 105.0 |
+| 3 | 138.5 | 30.0 |
+| 4 | 138.5 | 105.0 |
 
-Gövde tarafı Ø2.5 pilot, kapak tarafı Ø3.4 geçme + Ø6 × 2.0 havşa. Eski tasarımdaki 2 vida
-yerine 4 vida: 150 mm'lik kapağın ortadan açılmaması için.
+Gövde tarafı Ø6 kule + Ø2.5 pilot, kapak tarafı Ø3.4 geçme + Ø6 × 2.0 havşa. Kuleler dış
+kabuğa göre kırpılır (4.2'deki küre kabuğu ile kesişim), böylece 5°'lik eğim yüzünden
+duvardan dışarı taşmazlar. Kule x merkezi cebin kenarından 2.5 mm dışarıda; Ø6 kule cebe
+0.5 mm girer, kartın kenarına 1.0 mm boşluk kalır.
+
+Eski tasarımdaki 2 vida yerine 4 vida: 150 mm'lik kapağın ortadan açılmaması için.
 
 ## 5. Ekran desteği — `screen_shim`
 
@@ -182,30 +186,47 @@ Kapak tarafı:
 
 ## 6. Kabzalar
 
-- Gövdenin alt iki köşesinden **dışa ve aşağı 18°** açıyla çıkan iki lob.
-- Kesit yaklaşık **34 × 40 mm**, uçlar yarım küre, uzunluk **78 mm**.
-- En alçak nokta **z ≈ −38**; kabzalarla birlikte toplam yükseklik ≈ 61 mm.
-- Her kabza gövdeden **18 mm** dışarı taşar; kabzalarla toplam genişlik ≈ **186 mm**.
-- Gövdeye **R12** fileto ile karışır.
-- Duvar 2.5 mm, içi boş, %15 dolgu.
-- Geometri: kavis boyunca dizilmiş ~12 ölçeklenmiş kürenin dışbükey kabuğu.
+- Gövdenin alt iki köşesinden dışa ve aşağı doğru kıvrılan iki lob.
+- Geometri: kavis boyunca dizilmiş 5 kürenin dışbükey kabuğu, **z = −20 düzleminde
+  kesilmiş**. Kesme düzlemi gövdenin dış taban yüzeyi; kabzanın gövdeye bakan yüzü böylece
+  **düz** olur.
+- Sol kabza küre zinciri (merkez x, y, z ve yarıçap, D çerçevesinde):
+
+  | x | y | z | r |
+  |---|---|---|---|
+  | 30.0 | 14.0 | −22.0 | 16.0 |
+  | 20.0 | 3.0 | −24.0 | 14.0 |
+  | 8.0 | −8.0 | −26.0 | 12.0 |
+  | −5.0 | −17.0 | −28.0 | 10.0 |
+  | −17.0 | −25.0 | −30.0 | 8.0 |
+
+  Sağ kabza bu zincirin x = 68.0 düzlemine göre aynası (x' = 136.0 − x).
+- Sonuçlanan sınırlar: en alçak nokta **z = −38**, en dış nokta **x = −25** (sağda 161),
+  yani her kabza gövdeden **18 mm** taşar. Kabzalarla toplam genişlik **186 mm**, toplam
+  yükseklik **61 mm**.
+- Kesit çapı kökte 32 mm, uçta 16 mm; gövdenin altından ölçülen derinlik 18 mm.
+- Duvar 2.5 mm, içi boş (dış kabuk ile yarıçapları 2.5 mm küçültülmüş iç kabuk arasındaki
+  fark), gövdeye bakan yüzü açık.
+- **Fileto yok.** Kabza ayrı parça olduğu için gövde ile arasında düz bir ayrım çizgisi
+  kalır. Geçişin sert görünmemesi için zincirin kök küresi en büyük (r = 16) seçilmiştir;
+  lob birleşme yerinde en geniş halindedir.
 
 ### 6.1 Bağlantı
 
-Her kabza gövdeye **2 × M3 × 14** ile bağlanır; vidalar kabzanın içinden geçip gövdenin
-taban plakasında, yan duvarın 7 mm'lik bandı içinde kalan yerel pedlere girer (Ø2.5 pilot,
-ped kalınlığı 8 mm, z = −20 … −12). Ek olarak her kabzanın kök yüzünde 1 adet Ø4 × 6
-hizalama pimi, gövdede karşılığı olan körlü deliğe oturur — kabza dönmez, kesme yükü
-vidadan alınır.
+Her kabza gövdeye **2 × M3 × 14** ile bağlanır. Vidalar kabzanın içinden +Z yönünde geçip
+gövdenin taban plakasındaki yerel pedlere girer: ped Ø10, z = −20 … −12, pilot delik Ø2.5,
+derinlik 7 mm. Ek olarak her kabzanın kök yüzünde 1 adet Ø4 × 6 hizalama pimi, gövde
+tabanındaki Ø4.2 × 6.5 körlü deliğe oturur — kabza dönmez, kesme yükü vidadan alınır.
 
 | Parça | Vida 1 | Vida 2 | Pim |
 |---|---|---|---|
-| Sol kabza | (−3.5, 8.0) | (−3.5, 50.0) | (−3.5, 29.0) |
-| Sağ kabza | (139.5, 8.0) | (139.5, 50.0) | (139.5, 29.0) |
+| Sol kabza | (12.0, 8.0) | (38.0, 4.0) | (26.0, 4.0) |
+| Sağ kabza | (124.0, 8.0) | (98.0, 4.0) | (110.0, 4.0) |
 
-Hepsi yan duvarın orta çizgisinde; 3.2'deki kart direkleri (x ≈ 12 ve 124) ve 4.4'teki
-kapak vidası kuleleri (y = 30 ve 105, z = 16 … 23) ile çakışma yok — kabza bağlantıları
-z = −20 … −12 bandında kalıyor.
+Üçü de kabzanın z = −20'deki düz kök izinin ve gövdenin taban yüzeyinin ortak alanı
+içindedir. Pedler z = −20 … −12 bandında kalır; 3.2'deki kart direkleri (z = −18.5 … 0)
+ile aynı XY bölgesinde olsalar bile ikisi tek gövde olarak birleşir, çakışma sorunu
+oluşmaz. 4.4'teki kapak vidası kuleleri (y = 30 ve 105, z = 16 … 23) çok uzakta.
 
 ## 7. Üretim ve baskı yönü
 
@@ -213,14 +234,15 @@ z = −20 … −12 bandında kalıyor.
 |---|---|---|
 | `controller_shell` | Ağzı yukarı, tabanı tablada | Yok |
 | `controller_lid` | Üst yüzü tablada | Yok |
-| `controller_grip_left` / `_right` | Uç kapağı tablada, dik | Yok |
+| `controller_grip_left` / `_right` | Düz kök yüzü (z = −20 kesiti) tablada | Yok |
 | `screen_shim_*` | Düz | Yok |
 
 **Kabzalar neden ayrı parça:** kabza gövdeden aşağı doğru uzanıyor. Gövde ağzı yukarı
 basıldığında kabzanın her katmanı havaya sarkar; gövde ters çevrildiğinde ise 136 mm'lik iç
 zemin tavan olur ve köprülenemez. Hangi yönde dizilirse dizilsin tek parça destek istiyor.
-Ayrı basılan kabza dik durduğunda hiç destek almıyor, ayrıca ergonomi tutmazsa yalnız kabza
-yeniden basılıyor ve istenirse TPU veya farklı renk kullanılabiliyor.
+Ayrı basılan kabza, düz kök yüzü tablada dururken yukarı doğru daralan bir kubbedir ve hiç
+destek almaz; ayrıca ergonomi tutmazsa yalnız kabza yeniden basılıyor ve istenirse TPU veya
+farklı renk kullanılabiliyor.
 
 Tabla gereksinimi: en büyük parça `controller_lid`, 154.4 × 146.4 mm. 220 × 220 tablaya
 sığar.
