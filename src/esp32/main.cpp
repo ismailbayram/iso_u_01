@@ -3,6 +3,7 @@
 #include <Adafruit_SSD1306.h>
 #include <LoRa_E22.h>
 #include <Wire.h>
+#include <string.h>
 #include "radio_protocol.h"
 
 #ifndef USE_GPS
@@ -78,6 +79,18 @@ const unsigned long LINK_LOST_BEEP_INTERVAL_MS = 2000;
 unsigned long lastStatusDisplayTime = 0;
 unsigned long lastTelemetryRxTime = 0;
 unsigned long lastLinkLostBeepTime = 0;
+
+char usbLineBuffer[32];
+uint8_t usbLineLength = 0;
+uint8_t pendingCommand = 0;
+bool pendingDisarm = false;
+uint8_t commandSeq = 0;
+
+const unsigned long STICK_REPORT_INTERVAL_MS = 200; // 5 Hz
+unsigned long lastStickReportTime = 0;
+
+bool lastArmedState = false;
+bool armedStateKnown = false;
 
 // Ilk gecerli basinc olcumu referans alinip irtifa ona gore hesaplanir, boylece
 // kalkis noktasi sifir olur. Mutlak irtifa icin deniz seviyesi basinci gerekirdi.
@@ -162,6 +175,38 @@ bool parseIncomingLoRaByte(uint8_t b)
         }
         relativeAltitudeM = pressureToAltitude(lastTelemetry.pressurePa, baselinePressurePa);
       }
+
+      Serial.print("$T,");
+      Serial.print(millis());
+      Serial.print(',');
+      Serial.print(lastTelemetry.voltageMv);
+      Serial.print(',');
+      Serial.print(lastTelemetry.battTempCentiC);
+      Serial.print(',');
+      Serial.print(lastTelemetry.escTempCentiC);
+      Serial.print(',');
+      Serial.print(lastTelemetry.mpuAx);
+      Serial.print(',');
+      Serial.print(lastTelemetry.mpuAy);
+      Serial.print(',');
+      Serial.print(lastTelemetry.mpuAz);
+      Serial.print(',');
+      Serial.print(lastTelemetry.mpuGx);
+      Serial.print(',');
+      Serial.print(lastTelemetry.mpuGy);
+      Serial.print(',');
+      Serial.print(lastTelemetry.mpuGz);
+      Serial.print(',');
+      Serial.print(lastTelemetry.compassHeading);
+      Serial.print(',');
+      Serial.print(lastTelemetry.pressurePa);
+      Serial.print(',');
+      Serial.print(lastTelemetry.baroTempCentiC);
+      Serial.print(',');
+      Serial.print(lastTelemetry.statusFlags);
+      Serial.print(',');
+      Serial.println(telemetryRxCount);
+
       return true;
     }
     break;
@@ -348,7 +393,8 @@ void updateStatusDisplay()
       display.print(relativeAltitudeM, 1);
       display.println("m");
     }
-    display.print("Link OK  #");
+    display.print((lastTelemetry.statusFlags & radio::STATUS_ARMED) ? "ARMED" : "DISARM");
+    display.print("  #");
     display.println(telemetryRxCount);
   }
   display.display();
@@ -359,6 +405,78 @@ void updateStatusDisplay()
     tone(PIN_BUZZER, 330, 150);
   }
 #endif
+}
+
+void handleUsbCommand(const char *line)
+{
+  if (strcmp(line, "CAL") == 0)
+  {
+    pendingCommand = radio::COMMAND_CALIBRATE_LEVEL;
+  }
+  else if (strcmp(line, "CALCLR") == 0)
+  {
+    pendingCommand = radio::COMMAND_CLEAR_CALIBRATION;
+  }
+  else if (strcmp(line, "DISARM") == 0)
+  {
+    // Acil durdurma tek yuvali pendingCommand'i paylasmaz: sonradan gelen
+    // bir komut onu ezmemeli.
+    pendingDisarm = true;
+  }
+}
+
+void pollUsbCommands()
+{
+  while (Serial.available())
+  {
+    char c = (char)Serial.read();
+    if (c == '\n' || c == '\r')
+    {
+      if (usbLineLength > 0)
+      {
+        usbLineBuffer[usbLineLength] = '\0';
+        handleUsbCommand(usbLineBuffer);
+        usbLineLength = 0;
+      }
+    }
+    else if (usbLineLength < sizeof(usbLineBuffer) - 1)
+    {
+      usbLineBuffer[usbLineLength++] = c;
+    }
+    else
+    {
+      usbLineLength = 0; // asiri uzun satir, at
+    }
+  }
+}
+
+void updateArmedFeedback()
+{
+  const bool armed = (lastTelemetry.statusFlags & radio::STATUS_ARMED) != 0;
+
+  if (!armedStateKnown)
+  {
+    armedStateKnown = true;
+    lastArmedState = armed;
+    return;
+  }
+
+  if (armed == lastArmedState)
+  {
+    return;
+  }
+  lastArmedState = armed;
+
+  if (armed)
+  {
+    tone(PIN_BUZZER, 784, 120);  // G5
+    delay(140);
+    tone(PIN_BUZZER, 1047, 200); // C6
+  }
+  else
+  {
+    tone(PIN_BUZZER, 330, 250); // E4
+  }
 }
 
 static float filteredLX = 2048;
@@ -510,6 +628,22 @@ void loop()
     }
   }
 
+  pollUsbCommands();
+  updateArmedFeedback();
+
+  if (millis() - lastStickReportTime >= STICK_REPORT_INTERVAL_MS)
+  {
+    lastStickReportTime = millis();
+    Serial.print("$S,");
+    Serial.print(controlPacket.LX);
+    Serial.print(',');
+    Serial.print(controlPacket.LY);
+    Serial.print(',');
+    Serial.print(controlPacket.RX);
+    Serial.print(',');
+    Serial.println(controlPacket.RY);
+  }
+
   updateStatusDisplay();
 
   if (millis() - lastTelemetryRequestTime >= TELEMETRY_REQUEST_INTERVAL_MS)
@@ -540,6 +674,26 @@ void loop()
 
     if (digitalRead(LORA_AUX) == HIGH)
     {
+      if (pendingDisarm)
+      {
+        radio::CommandPacket cmd;
+        cmd.sequence = commandSeq++;
+        cmd.command = radio::COMMAND_DISARM;
+        pendingDisarm = false;
+        sendFrame(radio::PACKET_TYPE_COMMAND, &cmd, sizeof(cmd));
+        return;
+      }
+
+      if (pendingCommand != 0)
+      {
+        radio::CommandPacket cmd;
+        cmd.sequence = commandSeq++;
+        cmd.command = pendingCommand;
+        pendingCommand = 0;
+        sendFrame(radio::PACKET_TYPE_COMMAND, &cmd, sizeof(cmd));
+        return; // bu yuvada kontrol paketi gonderme, 20 ms sonra devam
+      }
+
       controlPacket.packetID = packetCounter++;
       controlPacket.LX = (uint16_t)rawLX;
       controlPacket.LY = (uint16_t)rawLY;

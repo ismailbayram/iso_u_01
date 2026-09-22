@@ -10,11 +10,33 @@ constexpr uint8_t PREAMBLE_2 = 0x55;
 enum PacketType : uint8_t {
   PACKET_TYPE_CONTROL = 1,
   PACKET_TYPE_TELEMETRY = 2,
-  PACKET_TYPE_TELEMETRY_REQ = 3
+  PACKET_TYPE_TELEMETRY_REQ = 3,
+  PACKET_TYPE_COMMAND = 4
+};
+
+enum CommandId : uint8_t {
+  COMMAND_CALIBRATE_LEVEL = 1,
+  COMMAND_CLEAR_CALIBRATION = 2,
+  COMMAND_DISARM = 3
+};
+
+// TelemetryPacket::statusFlags bitleri.
+enum StatusFlag : uint8_t {
+  STATUS_ACCEL_OK = 1 << 0,
+  STATUS_GYRO_OK = 1 << 1,
+  STATUS_MAG_OK = 1 << 2,
+  STATUS_BARO_OK = 1 << 3,
+  STATUS_CALIBRATED = 1 << 4,
+  STATUS_ARMED = 1 << 5
 };
 
 struct __attribute__((packed)) TelemetryRequestPacket {
   uint8_t sequence;
+};
+
+struct __attribute__((packed)) CommandPacket {
+  uint8_t sequence;
+  uint8_t command;
 };
 
 struct __attribute__((packed)) ControlPacket {
@@ -42,6 +64,7 @@ struct __attribute__((packed)) TelemetryPacket {
   uint8_t gpsSats;
   uint32_t pressurePa;     // BMP280 basinci, Pascal. Sensor yoksa 0.
   int16_t baroTempCentiC;  // BMP280 sicakligi, santi-derece. Sensor yoksa INT16_MIN.
+  uint8_t statusFlags;     // StatusFlag bitleri.
 };
 
 inline uint8_t computeFrameChecksum(uint8_t packetType, uint8_t payloadLength, const uint8_t *payload) {
