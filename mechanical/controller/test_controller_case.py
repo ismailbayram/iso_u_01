@@ -449,12 +449,18 @@ def test_grips_stay_inside_the_body_silhouette(grips):
     assert high_x <= outline[:, 0].max()
 
 
-def test_grips_run_forward_toward_the_user(grips):
-    """The lobe's length is in Y, which is where the hand actually wraps."""
-    for grip in grips.values():
+def test_grips_sit_under_the_body_front_corners(grips):
+    """Each grip hangs off a front corner and curls under the front lip.
+
+    Centred under the body instead, it reads as a foot rather than as the
+    flared body carrying on downward.
+    """
+    outline = np.array(geom.plan_outline())
+    front = outline[:, 1].min()
+    for side, grip in grips.items():
         low_x, low_y, _, high_x, high_y, _ = grip.bounding_box()
-        assert low_y == pytest.approx(-33.0, abs=0.5)
-        assert high_y - low_y > high_x - low_x
+        assert low_y < front, f"{side} grip stops short of the front lip"
+        assert high_x - low_x > 40.0, f"{side} grip root is too narrow"
 
 
 def test_grips_are_mirror_images(grips):

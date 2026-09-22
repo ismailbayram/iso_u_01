@@ -37,8 +37,8 @@ LID_SCREW_PILOT_DEPTH = 12.0
 # Kept clear of the rounded bottom edge: the flat underside only starts at
 # y = 2.49, so a 10 mm pad centred below y = 7.5 would hang off the part.
 GRIP_SCREWS = {
-    "left": ((8.0, 8.0), (26.0, 16.0)),
-    "right": ((128.0, 8.0), (110.0, 16.0)),
+    "left": ((6.0, 10.0), (24.0, 20.0)),
+    "right": ((130.0, 10.0), (112.0, 20.0)),
 }
 GRIP_PAD_D = 10.0
 GRIP_PAD_TOP_Z = -12.0
@@ -77,12 +77,15 @@ LID_TEXT_POS = (68.0, 20.0)
 # Runs down and toward the user rather than out to the side: the flared
 # body already provides the width, so the grips add depth under its front
 # corners and stay inside the silhouette instead of reading as wings.
+# Sits under the body's front corner and curls forward under the front
+# lip. Only the first few spheres reach the z = -20 cut, which is what
+# keeps the root face from spreading into a shelf out in front of the part.
 GRIP_CHAIN_LEFT = (
-    (22.0, 16.0, -18.0, 20.0),
-    (16.0, 6.0, -20.0, 18.0),
-    (10.0, -4.0, -22.0, 16.0),
-    (4.0, -13.0, -24.0, 14.0),
-    (-3.0, -22.0, -27.0, 11.0),
+    (14.0, 14.0, -14.0, 24.0),
+    (11.0, 6.0, -23.0, 15.0),
+    (8.0, -1.0, -27.0, 11.0),
+    (5.0, -8.0, -30.0, 8.0),
+    (2.0, -15.0, -32.0, 6.0),
 )
 GRIP_MIRROR_X = 136.0
 GRIP_WALL = 2.5
