@@ -71,27 +71,50 @@ aralıkları 113.38 ve 113.88. Delikler karta zaten açılmış olduğu için bu
 
 ### 3.3 Kapak kesikleri (D çerçevesinde)
 
+Değerler `trimesh.Trimesh.section` ile z = 19.0 düzleminden, kapalı çevrimlerin sınır
+kutularından okunmuştur:
+
 | Özellik | Merkez | Ölçü |
 |---|---|---|
-| Sol joystick | (26.94, 50.32) | Ø30.5 |
-| Sağ joystick | (108.69, 51.32) | Ø31.0 |
-| Ekran penceresi | (107.19, 113.32) | 38.0 × 12.5 |
-| Kapak vidası (sol) | (4.19, 67.47) | Ø4 |
-| Kapak vidası (sağ) | (130.19, 67.47) | Ø4 |
+| Sol joystick | (27.19, 50.61) | Ø30.0 |
+| Sağ joystick | (108.90, 51.39) | Ø30.0 |
+| Ekran deliği | (107.44, 113.77) | 37.5 × 12.2 |
+| Ekran omzu | (107.44, 113.77) | 39.5 × 14.2 |
+| Kapak vidası (sol) | (4.22, 67.44) | Ø2.5 |
+| Kapak vidası (sağ) | (130.20, 67.44) | Ø2.5 |
 
-### 3.4 Üst kenar profili (kapak dış hattı, D çerçevesinde)
+### 3.4 Üst kenardaki anten / USB kanalı
 
-Üst kenar düz değil; ortasında basamaklı bir bant ve onun içinde bir kablo yuvası var:
+Üst kenarın ortası oyuk. Gövde duvarı x ≈ 46 … 89 arasında **y = 129.0**'a kadar geri
+çekilmiş ve kanal tüm yükseklik boyunca dışarı açık; iki yanında x ≈ 36 → 46 ve x ≈ 89 →
+104 arasında pah var. SMA konnektörünün anteni ve ESP32'nin micro-USB kablosu buradan
+çıkıyor. Kapakta ek olarak x = 63.0 … 74.6 arasında **y = 120.3**'e inen, kabloyu yukarı
+bükmeye yarayan daha derin bir yuva var.
 
-- y = 136.0 (tam kenar), x < 39.4 ve x > 94.6 aralıklarında
-- x ≈ 39.4 → 45.7 arasında pahlanarak y = 128.3'e iner
-- y = 128.3 bandı x ≈ 45.7 … 89.3 arası
-- x ≈ 89.3 → 94.6 arasında pahlanarak y = 136.0'ya çıkar
-- Bandın içinde **x = 63.0 … 74.6, y = 120.3'e kadar inen yuva** — micro-USB kablosu
-  (11.6 mm genişlik, 15.7 mm derinlik, merkez x = 68.8)
+Kullanıcı bu bölgenin oturduğunu söylüyor, dolayısıyla **yorumlanmıyor, boolean ile
+kopyalanıyor**:
 
-Gövde tarafında da aynı bandın karşılığı var (üst duvar z = 0…16 aralığında y = 129.0'a
-çekilmiş).
+```
+KANAL_BOLGESI = kutu(x = 28 … 108, y = 126.0 … 136.07, z = −21 … 24)
+kanal_negatifi = KANAL_BOLGESI − eski_govde_kati
+```
+
+`eski_govde_kati`, `kumanda_alt.stl`'in D çerçevesine ötelenmiş (−135.15, −14.11, 0) hali.
+Bu negatif hem yeni gövdeden hem yeni kapaktan çıkarılır; eski parçanın o bölgede açık
+bıraktığı her hacim yeni parçada da açık kalır.
+
+Yeni gövdenin dış kenarı y = 138.63'te, eskisi ise y = 136.07'deydi. Aradaki 2.56 mm'lik
+şeridi de açmak için ikinci bir kesim uygulanır:
+
+```
+kanal_uzantisi = kutu(x = 36.27 … 103.94, y = 136.07 … 145, z = −21 … 24)
+```
+
+Kapağa ayrıca kablo yuvası eklenir:
+
+```
+kablo_yuvasi = kutu(x = 62.69 … 74.29, y = 120.37 … 145, z = 20 … 24)
+```
 
 ### 3.5 Eski ekran desteği (kaldırılacak)
 
@@ -130,11 +153,12 @@ işlemde çıkar.
 - Etek gövde duvarının dışını sarar, z = 11.0'a kadar iner (duvar üstü 16.0, örtüşme 5 mm).
   Etek 2.0 mm kalın, gövde ile arasında 0.2 mm geçme boşluğu var; kapağın dış ölçüsü bu
   yüzden **154.4 × 146.4 mm**. Kapak, takımın en büyük parçasıdır.
-- Joystick delikleri: ikisi de **Ø33**, merkezleri **(26.94, 50.82)** ve **(108.69, 50.82)**.
-  Eski deliklerin Y'si 1 mm kaçıktı (50.32 / 51.32); ortak Y'ye alınıp çap 33'e çıkarılınca
-  ikisi de içinde kalıyor ve göze simetrik geliyor. X değerleri ölçülen haliyle korunuyor.
+- Joystick delikleri: ikisi de **Ø33**, merkezleri **(27.19, 51.00)** ve **(108.90, 51.00)**.
+  Eski deliklerin Y'si 0.78 mm kaçıktı (50.61 / 51.39); ortak Y = 51.00'a alınıp çap 30'dan
+  33'e çıkarılınca eski deliklerin ikisi de yenisinin içinde kalıyor ve göze simetrik
+  geliyor. X değerleri ölçülen haliyle korunuyor.
 - Her joystick deliğinin çevresinde **Ø46, 1.2 mm derin küresel çukur** (başparmak yuvası).
-- Üst kenar profili ve USB yuvası: 3.4'teki koordinatlarla birebir.
+- Anten / USB kanalı: 3.4'teki boolean kuralıyla, kablo yuvası dahil.
 - Yazılar **0.6 mm gömme**: "ISO U1" kapağın alt bölgesine (merkez x = 68, y ≈ 20),
   "İstikbal Göklerdedir" gövdenin alt dış yüzüne. Kabartma iptal — mevcut baskıda tüylenmiş.
 
@@ -182,7 +206,7 @@ Kapak tarafı:
 - Kapak üst yüzünde pencerenin çevresinde **46 × 20 mm, 1.0 mm gömme panel alanı**. Düz
   basılmış bu çerçeve göz için referans olur; modülde kalan birkaç onda derecelik kaçıklık
   okunmaz.
-- Hepsi 3.3'teki (107.19, 113.32) merkezine hizalı.
+- Hepsi 3.3'teki (107.44, 113.77) merkezine hizalı.
 
 ## 6. Kabzalar
 
@@ -271,8 +295,9 @@ fonksiyon gövdesine gömülmez.
 1. Kart direklerinin XY merkezleri — sapma > 0.10 mm ise hata.
 2. Joystick deliklerinin X merkezleri — sapma > 0.30 mm ise hata. (Y kasıtlı olarak
    değiştiği için kontrol edilmez.)
-3. Ekran penceresinin merkezi — sapma > 0.30 mm ise hata.
-4. USB yuvasının X aralığı ve üst kenar bandının Y basamakları — sapma > 0.30 mm ise hata.
+3. Ekran deliğinin ve omzunun merkezi — sapma > 0.30 mm ise hata.
+4. Eski gövdenin 3.4'teki kanal bölgesinde açık bıraktığı hacim, yeni gövde ve yeni kapakta
+   da tamamen açık mı — kesişim hacmi > 1 mm³ ise hata.
 5. Yeni kapağın joystick delikleri, eski kapağın deliklerini tamamen kapsıyor mu.
 
 Ayrıca geometri kontrolü: her parça su geçirmez (`is_watertight`) ve tek gövde
