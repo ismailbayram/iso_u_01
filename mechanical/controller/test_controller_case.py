@@ -304,3 +304,45 @@ def test_grip_screw_seats_are_deep_enough_to_take_an_m3x14(side):
     for x, y in case.GRIP_SCREWS[side]:
         probe = geom.cyl(case.GRIP_HEAD_D, 0.5, x, y, case.GRIP_HEAD_Z)
         assert (probe - envelope).volume() == pytest.approx(0.0, abs=0.3)
+
+
+def test_shim_nominal_height_places_the_module_on_the_seat():
+    """board top + shim + PCB must land exactly on the lid's shoulder."""
+    board_top = datum.BOARD_SEAT_Z + datum.BOARD_T
+    assert board_top + case.SHIM_NOMINAL_H + datum.BOARD_T == pytest.approx(
+        datum.SCREEN_SEAT_Z, abs=0.01)
+
+
+@pytest.mark.parametrize("height", [13.3, 13.8, 14.3])
+def test_shim_is_a_single_watertight_body(height):
+    mesh = geom.to_trimesh(case.build_shim(height))
+    assert mesh.is_watertight
+    assert mesh.body_count == 1
+
+
+@pytest.mark.parametrize("height", [13.3, 13.8, 14.3])
+def test_shim_top_face_sits_at_the_asked_for_height(height):
+    shim = case.build_shim(height)
+    _, _, low_z, _, _, high_z = shim.bounding_box()
+    assert low_z == pytest.approx(0.0, abs=0.01)
+    assert high_z == pytest.approx(height + case.SHIM_LIP_H, abs=0.01)
+
+
+def test_shim_footprint_clears_the_module():
+    shim = case.build_shim(case.SHIM_NOMINAL_H)
+    low_x, low_y, _, high_x, high_y, _ = shim.bounding_box()
+    assert high_x - low_x == pytest.approx(
+        case.SHIM_OUTER[0] + 2 * case.SHIM_LIP_T, abs=0.05)
+    assert high_y - low_y == pytest.approx(
+        case.SHIM_OUTER[1] + case.SHIM_LIP_T, abs=0.05)
+
+
+def test_shim_is_open_on_the_header_edge():
+    """The pin row and its solder must pass straight through."""
+    shim = case.build_shim(case.SHIM_NOMINAL_H)
+    probe = geom.box(-case.SHIM_OUTER[0] / 2 + case.SHIM_RIM,
+                     case.SHIM_OUTER[0] / 2 - case.SHIM_RIM,
+                     -case.SHIM_OUTER[1] / 2 - case.SHIM_LIP_T - 1.0,
+                     case.SHIM_OUTER[1] / 2 - case.SHIM_RIM,
+                     0.0, case.SHIM_NOMINAL_H)
+    assert (probe ^ shim).volume() == pytest.approx(0.0, abs=0.5)

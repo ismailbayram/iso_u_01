@@ -88,6 +88,15 @@ GRIP_CLEAR_D = 3.4
 GRIP_HEAD_D = 6.5
 GRIP_HEAD_Z = -30.0
 
+# --- screen shim ----------------------------------------------------------
+SHIM_OUTER = (38.4, 12.4)
+SHIM_RIM = 3.0
+SHIM_LIP_H = 1.0
+SHIM_LIP_T = 0.8
+SHIM_NOMINAL_H = datum.SCREEN_SEAT_Z - datum.BOARD_T - (
+    datum.BOARD_SEAT_Z + datum.BOARD_T)
+SHIM_HEIGHTS = (SHIM_NOMINAL_H - 0.5, SHIM_NOMINAL_H, SHIM_NOMINAL_H + 0.5)
+
 
 def shell_outer_surface():
     """The shell's outer skin: full size up to the skirt, rebated above it."""
@@ -214,3 +223,22 @@ def build_grip(side):
                     x, y, GRIP_HEAD_Z)
         grip -= cyl(GRIP_HEAD_D, 4.0, x, y, GRIP_HEAD_Z - 0.5)
     return grip
+
+
+def build_shim(height):
+    """A little table that holds the OLED module flat on the perfboard.
+
+    Open along one long edge so the soldered pin header and its blobs pass
+    through; the other three edges are what stop the module tipping. The old
+    case supported only one end of it, which is why it sat crooked.
+    """
+    half_x, half_y = SHIM_OUTER[0] / 2, SHIM_OUTER[1] / 2
+    shim = box(-half_x, half_x, -half_y, half_y, 0.0, height)
+    shim -= box(-half_x + SHIM_RIM, half_x - SHIM_RIM,
+                -half_y - 1.0, half_y - SHIM_RIM, -1.0, height + 1.0)
+
+    lip = box(-half_x - SHIM_LIP_T, half_x + SHIM_LIP_T,
+              -half_y, half_y + SHIM_LIP_T, height, height + SHIM_LIP_H)
+    lip -= box(-half_x, half_x, -half_y - 1.0, half_y,
+               height - 1.0, height + SHIM_LIP_H + 1.0)
+    return shim + lip
