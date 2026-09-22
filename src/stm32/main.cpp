@@ -6,6 +6,12 @@
 #include <Servo.h>
 #include <Wire.h>
 #include "radio_protocol.h"
+#include "arming.h"
+#include "calibration.h"
+
+// applyFailsafe dosyada readGy85'ten sonra tanimli; kalibrasyon
+// fonksiyonlari (dosyanin ustunde) onu cagirdigi icin ileri bildirim.
+void applyFailsafe();
 
 #ifndef USE_GPS
 #define USE_GPS 0
@@ -62,6 +68,15 @@ const int SERVO_CENTER_DEG = 90;
 const int SERVO_TRAVEL_DEG = 45;
 const int SERVO_MIN_DEG = SERVO_CENTER_DEG - SERVO_TRAVEL_DEG;
 const int SERVO_MAX_DEG = SERVO_CENTER_DEG + SERVO_TRAVEL_DEG;
+
+// applyOutputs() bu degerleri onbellek olarak kullanip gereksiz servo
+// yazimlarini eliyor. applyFailsafe() servolari fiziksel olarak merkeze
+// aldigi icin onbellegi de oradan guncellemek zorunda; yoksa cubuk ayni
+// yerdeyse servo bir daha hic komut almaz.
+int lastServoAIL = SERVO_CENTER_DEG;
+int lastServoELE = SERVO_CENTER_DEG;
+int lastServoRUD = SERVO_CENTER_DEG;
+
 // Ust bacak = besleme kablosuna seri eklenen 330k.
 // Alt bacak = kart uzerindeki R7 (47k), PA4 ile GND arasinda.
 const float VBAT_DIVIDER_R_TOP = 330000.0f;
@@ -78,6 +93,37 @@ unsigned long lastTelemetryTime = 0;
 unsigned long lastPacketTime = 0;
 
 const unsigned long RX_TIMEOUT_MS = 300;
+// Link uzun sure giderse disarm et. 300 ms'lik failsafe gazi zaten minimuma
+// cekiyor; bu esik ancak baglanti gercekten koptuysa devreye girer.
+const unsigned long DISARM_ON_LINK_LOSS_MS = 5000;
+arming::GestureDetector armDetector;
+
+// Kalibrasyon kaydi flash sektor 7'de (0x08060000, 128 KB). Firmware 41 KB
+// ve sektor 0-2'de duruyor; sektor 7 firmware buyuse bile cakismaz.
+#define CALIBRATION_FLASH_ADDRESS 0x08060000UL
+#define CALIBRATION_FLASH_SECTOR FLASH_SECTOR_7
+
+int16_t accelOffsetX = 0;
+int16_t accelOffsetY = 0;
+int16_t gyroBiasX = 0;
+int16_t gyroBiasY = 0;
+int16_t gyroBiasZ = 0;
+bool calibrationLoaded = false;
+
+// Kalibrasyon orneklemesi loop()'u bloklamaz: her turda suresi gelen bir
+// ornek alinir. Normal IMU araligi 50 ms, burada 5 ms kullaniliyor.
+const unsigned long CAL_SAMPLE_INTERVAL_MS = 5;
+const uint8_t CAL_SAMPLE_TARGET = 16;
+bool calSampling = false;
+uint8_t calSampleCount = 0;
+int32_t calAccumAx = 0, calAccumAy = 0;
+int32_t calAccumGx = 0, calAccumGy = 0, calAccumGz = 0;
+unsigned long lastCalSampleMs = 0;
+
+uint8_t pendingCommand = 0;
+uint8_t lastCommandSeq = 0;
+bool commandSeqValid = false;
+
 uint8_t payloadBuffer[64];
 uint8_t payloadIndex = 0;
 uint8_t parserState = 0;
@@ -119,14 +165,148 @@ uint8_t gpsSats = 0;
 
 void sendFrame(uint8_t packetType, const void *payload, uint8_t payloadLength);
 
+void loadCalibrationFromFlash()
+{
+    calibration::Record record;
+    memcpy(&record, (const void *)CALIBRATION_FLASH_ADDRESS, sizeof(record));
+
+    if (!calibration::isValid(record))
+    {
+        calibrationLoaded = false;
+        return;
+    }
+
+    accelOffsetX = record.accelOffsetX;
+    accelOffsetY = record.accelOffsetY;
+    gyroBiasX = record.gyroBiasX;
+    gyroBiasY = record.gyroBiasY;
+    gyroBiasZ = record.gyroBiasZ;
+    calibrationLoaded = true;
+}
+
+// DIKKAT: sektor silme ~1-2 saniye surer ve bu sirada flash veriyolu
+// durdugu icin kod calismaz. Cagiran taraf once gazi minimuma cekmeli.
+bool saveCalibrationToFlash()
+{
+    calibration::Record record{};
+    record.magic = calibration::MAGIC;
+    record.version = calibration::VERSION;
+    record.accelOffsetX = accelOffsetX;
+    record.accelOffsetY = accelOffsetY;
+    record.gyroBiasX = gyroBiasX;
+    record.gyroBiasY = gyroBiasY;
+    record.gyroBiasZ = gyroBiasZ;
+    calibration::finalize(record);
+
+    // Sektor silme sirasinda kesmeler calismaz ve stm32duino'nun Servo'su
+    // kesme tabanli oldugu icin sinyal hatlari o anki seviyede donar.
+    // Surekli HIGH gecerli bir darbe degil; analog servoyu durduruculara
+    // dayayip kilitli rotor akimina sokabilir. Hatlari birakiyoruz:
+    // sinyal yoklugu servolarin pozisyonlarini korumasi demek.
+    servoAIL.detach();
+    servoELE.detach();
+    servoRUD.detach();
+    digitalWrite(PIN_SERVO_AIL, LOW);
+    digitalWrite(PIN_SERVO_ELE, LOW);
+    digitalWrite(PIN_SERVO_RUD, LOW);
+
+    HAL_FLASH_Unlock();
+
+    FLASH_EraseInitTypeDef erase = {};
+    erase.TypeErase = FLASH_TYPEERASE_SECTORS;
+    erase.Sector = CALIBRATION_FLASH_SECTOR;
+    erase.NbSectors = 1;
+    erase.VoltageRange = FLASH_VOLTAGE_RANGE_3;
+
+    bool ok = true;
+    uint32_t sectorError = 0;
+    if (HAL_FLASHEx_Erase(&erase, &sectorError) != HAL_OK)
+    {
+        Serial.print("[CAL] sektor silme hatasi: ");
+        Serial.println(sectorError);
+        ok = false;
+    }
+    else
+    {
+        // Record packed oldugu icin hizalamasi 1; dogrudan uint32_t olarak okumak
+        // tanimsiz davranis. Once hizali bir tampona kopyalaniyor.
+        const uint32_t wordCount = sizeof(calibration::Record) / 4;
+        uint32_t words[sizeof(calibration::Record) / 4];
+        memcpy(words, &record, sizeof(calibration::Record));
+        for (uint32_t i = 0; i < wordCount; i++)
+        {
+            if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD,
+                                  CALIBRATION_FLASH_ADDRESS + i * 4,
+                                  words[i]) != HAL_OK)
+            {
+                ok = false;
+                break;
+            }
+        }
+    }
+
+    HAL_FLASH_Lock();
+
+    servoAIL.attach(PIN_SERVO_AIL);
+    servoELE.attach(PIN_SERVO_ELE);
+    servoRUD.attach(PIN_SERVO_RUD);
+    // Servo::attach() iceride pinMode(pin, OUTPUT) yapiyor. Kart servo
+    // sinyallerini 4.7k pull-up ile 5 V'a cektigi icin acik kollektore geri
+    // almak zorundayiz; yoksa seviye cevirici kayboluyor.
+    pinMode(PIN_SERVO_AIL, OUTPUT_OPEN_DRAIN);
+    pinMode(PIN_SERVO_ELE, OUTPUT_OPEN_DRAIN);
+    pinMode(PIN_SERVO_RUD, OUTPUT_OPEN_DRAIN);
+    servoAIL.write(SERVO_CENTER_DEG);
+    servoELE.write(SERVO_CENTER_DEG);
+    servoRUD.write(SERVO_CENTER_DEG);
+    lastServoAIL = SERVO_CENTER_DEG;
+    lastServoELE = SERVO_CENTER_DEG;
+    lastServoRUD = SERVO_CENTER_DEG;
+    return ok;
+}
+
+void startCalibration()
+{
+    calSampling = true;
+    calSampleCount = 0;
+    calAccumAx = 0;
+    calAccumAy = 0;
+    calAccumGx = 0;
+    calAccumGy = 0;
+    calAccumGz = 0;
+    lastCalSampleMs = 0;
+}
+
+void clearCalibration()
+{
+    // Devam eden ornekleme iptal: yoksa ~80 ms sonra serviceCalibration
+    // hem RAM'i hem flash'i tekrar yazip bu silmeyi sessizce geri alirdi.
+    calSampling = false;
+    accelOffsetX = 0;
+    accelOffsetY = 0;
+    gyroBiasX = 0;
+    gyroBiasY = 0;
+    gyroBiasZ = 0;
+    calibrationLoaded = false;
+    applyFailsafe();
+    // Gecerli ama tum ofsetleri sifir olan bir kayit yazilir. Bir sonraki
+    // boot'ta yuklenir; STATUS_CALIBRATED ofsetlerin hepsi sifir oldugu
+    // icin yine de set edilmez.
+    calibrationLoaded = saveCalibrationToFlash();
+    if (!calibrationLoaded)
+    {
+        Serial.println("[CAL] silme icin flash yazimi basarisiz");
+    }
+    lastPacketTime = millis();
+    // Durus boyunca jest zamanlamasi guvenilmez; pilot jesti bastan yapsin.
+    armDetector.reset(millis());
+}
+
 void applyOutputs(const ControlPacket &packet)
 {
     const int center = 2048;
     const int deadband = 45;
     const float filterAlpha = 0.35f;
-    static int lastServoAIL = SERVO_CENTER_DEG;
-    static int lastServoELE = SERVO_CENTER_DEG;
-    static int lastServoRUD = SERVO_CENTER_DEG;
     static float filteredLX = 2048.0f;
     static float filteredLY = 0.0f;
     static float filteredRX = 2048.0f;
@@ -160,7 +340,9 @@ void applyOutputs(const ControlPacket &packet)
     int s3 = map(constrain(lx, 0, 4095), 0, 4095, SERVO_MIN_DEG, SERVO_MAX_DEG);
     int escUs = map(constrain(ly, 0, 4095), 0, 4095, MIN_THROTTLE, MAX_THROTTLE);
 
-    myESC.writeMicroseconds(escUs);
+    // Disarm durumunda gaz cubugu nerede olursa olsun ESC minimumda kalir.
+    // Bu ayni zamanda ESC'nin kendi arming'ini duzgun yapmasini saglar.
+    myESC.writeMicroseconds(armDetector.isArmed() ? escUs : MIN_THROTTLE);
 
     if (abs(s1 - lastServoAIL) >= 2)
     {
@@ -185,6 +367,9 @@ void applyFailsafe()
     servoAIL.write(SERVO_CENTER_DEG);
     servoELE.write(SERVO_CENTER_DEG);
     servoRUD.write(SERVO_CENTER_DEG);
+    lastServoAIL = SERVO_CENTER_DEG;
+    lastServoELE = SERVO_CENTER_DEG;
+    lastServoRUD = SERVO_CENTER_DEG;
 }
 
 bool parseIncomingByte(uint8_t b)
@@ -249,6 +434,38 @@ bool parseIncomingByte(uint8_t b)
             memcpy(&req, payloadBuffer, sizeof(TelemetryRequestPacket));
             lastTelemetryReqSeq = req.sequence;
             telemetryRequested = true;
+        }
+        if (checksum == b && incomingPacketType == radio::PACKET_TYPE_COMMAND &&
+            incomingPayloadLength == sizeof(radio::CommandPacket))
+        {
+            radio::CommandPacket cmd;
+            memcpy(&cmd, payloadBuffer, sizeof(cmd));
+
+            if (cmd.command == radio::COMMAND_DISARM)
+            {
+                // Acil durdurma tekrar elemesinden MUAF. Iki kez disarm etmek
+                // zararsiz, ama bir sequence carpismasi yuzunden yutulmasi
+                // pilotun disarm sandigi bir ucakta pervaneyi canli birakir.
+                // Ayrica tek yuvali pendingCommand'a hic girmiyor ki
+                // sonradan gelen baska bir komut onu ezmemeli.
+                lastCommandSeq = cmd.sequence;
+                commandSeqValid = true;
+                // Acil durdurmadan sonra kuyruktaki flash komutu calismamali:
+                // 1-2 saniyelik durus tam da radyoyu en cok istedigimiz anda
+                // sagir birakir.
+                pendingCommand = 0;
+                armDetector.disarm(millis());
+                applyFailsafe();
+            }
+            else if (!commandSeqValid || cmd.sequence != lastCommandSeq)
+            {
+                // Yalniz flash yazan komutlar icin tekrar elemesi: ayni
+                // sequence iki kez uygulanirsa ikinci bir silme cevrimi ve
+                // 1-2 saniyelik durus olusur.
+                lastCommandSeq = cmd.sequence;
+                commandSeqValid = true;
+                pendingCommand = cmd.command;
+            }
         }
         break;
     }
@@ -440,6 +657,96 @@ void readGy85(int16_t &ax, int16_t &ay, int16_t &az,
     }
 }
 
+void serviceCalibration()
+{
+    if (!calSampling)
+    {
+        return;
+    }
+
+    // Komut geldiginde disarm'di ama ornekleme ~80 ms suruyor ve bu sirada
+    // pilot jesti tamamlayabilir. Flash yazimi tum MCU'yu 1-2 saniye
+    // durdurdugu icin armed durumda asla baslamamali.
+    if (armDetector.isArmed())
+    {
+        calSampling = false;
+        Serial.println("[CAL] armed olundu, kalibrasyon iptal");
+        return;
+    }
+
+    if (millis() - lastCalSampleMs < CAL_SAMPLE_INTERVAL_MS)
+    {
+        return;
+    }
+    lastCalSampleMs = millis();
+
+    int16_t ax = 0, ay = 0, az = 0, gx = 0, gy = 0, gz = 0, heading = 0;
+    readGy85(ax, ay, az, gx, gy, gz, heading);
+
+    calAccumAx += ax;
+    calAccumAy += ay;
+    calAccumGx += gx;
+    calAccumGy += gy;
+    calAccumGz += gz;
+    calSampleCount++;
+
+    if (calSampleCount < CAL_SAMPLE_TARGET)
+    {
+        return;
+    }
+
+    accelOffsetX = (int16_t)(calAccumAx / CAL_SAMPLE_TARGET);
+    accelOffsetY = (int16_t)(calAccumAy / CAL_SAMPLE_TARGET);
+    gyroBiasX = (int16_t)(calAccumGx / CAL_SAMPLE_TARGET);
+    gyroBiasY = (int16_t)(calAccumGy / CAL_SAMPLE_TARGET);
+    gyroBiasZ = (int16_t)(calAccumGz / CAL_SAMPLE_TARGET);
+    calSampling = false;
+
+    // Flash yazimi kodu ~1-2 saniye durdurur. Once gazi minimuma cek,
+    // sonra donuste sahte failsafe tetiklenmesin diye saati tazele.
+    applyFailsafe();
+    calibrationLoaded = saveCalibrationToFlash();
+    if (!calibrationLoaded)
+    {
+        // Flash'a yazilamadiysa RAM'deki ofsetleri de birak; telemetride
+        // "kalibre degil" derken duzeltilmis veri gondermek yaniltici olur.
+        accelOffsetX = 0;
+        accelOffsetY = 0;
+        gyroBiasX = 0;
+        gyroBiasY = 0;
+        gyroBiasZ = 0;
+        Serial.println("[CAL] flash yazimi basarisiz, ofsetler sifirlandi");
+    }
+    lastPacketTime = millis();
+    // Durus boyunca jest zamanlamasi guvenilmez; pilot jesti bastan yapsin.
+    armDetector.reset(millis());
+}
+
+static int16_t subtractClamped(int16_t value, int16_t offset)
+{
+    const int32_t result = (int32_t)value - (int32_t)offset;
+    if (result > INT16_MAX) return INT16_MAX;
+    if (result < INT16_MIN) return INT16_MIN;
+    return (int16_t)result;
+}
+
+uint8_t buildStatusFlags()
+{
+    uint8_t flags = 0;
+    if (adxlFound) flags |= radio::STATUS_ACCEL_OK;
+    if (itgFound) flags |= radio::STATUS_GYRO_OK;
+    if (qmcFound) flags |= radio::STATUS_MAG_OK;
+    if (bmpFound) flags |= radio::STATUS_BARO_OK;
+    if (calibrationLoaded &&
+        (accelOffsetX != 0 || accelOffsetY != 0 ||
+         gyroBiasX != 0 || gyroBiasY != 0 || gyroBiasZ != 0))
+    {
+        flags |= radio::STATUS_CALIBRATED;
+    }
+    if (armDetector.isArmed()) flags |= radio::STATUS_ARMED;
+    return flags;
+}
+
 void sendFrame(uint8_t packetType, const void *payload, uint8_t payloadLength)
 {
     const uint8_t *payloadBytes = (const uint8_t *)payload;
@@ -542,6 +849,9 @@ void setup()
     Wire.begin();
     initGy85();
     initBmp280();
+    loadCalibrationFromFlash();
+    Serial.print("[SETUP] Kalibrasyon: ");
+    Serial.println(calibrationLoaded ? "yuklendi" : "yok");
     Serial.print("[SETUP] BMP280: ");
     Serial.println(bmpFound ? "OK" : "NA");
     Serial.print("[SETUP] GY-85: ADXL=");
@@ -562,6 +872,7 @@ void setup()
 
     setupLoRaWithLibrary();
 
+    armDetector.reset(millis());
     lastPacketTime = millis();
 }
 
@@ -569,12 +880,45 @@ void loop()
 {
     updateDs18Temperatures();
 
+    if (pendingCommand != 0)
+    {
+        const uint8_t command = pendingCommand;
+        pendingCommand = 0;
+
+        switch (command)
+        {
+        case radio::COMMAND_CALIBRATE_LEVEL:
+            // Armed'ken reddedilir: flash yazimi kodu saniyelerce durdurur.
+            if (!armDetector.isArmed())
+            {
+                startCalibration();
+            }
+            break;
+        case radio::COMMAND_CLEAR_CALIBRATION:
+            if (!armDetector.isArmed())
+            {
+                clearCalibration();
+            }
+            break;
+        // COMMAND_DISARM artik parseIncomingByte'da, paket alinir alinmaz
+        // isleniyor (bkz. yukarida commandSeqValid blogu); burada tekrar
+        // islenmiyor.
+        default:
+            break;
+        }
+    }
+
+    serviceCalibration();
+
     uint8_t bytesProcessed = 0;
     while (Serial1.available() && bytesProcessed < 32)
     {
         if (parseIncomingByte((uint8_t)Serial1.read()))
         {
             lastPacketTime = millis();
+            // Jest, STM32'nin kendi filtresinden ONCE, ham paket degerleriyle
+            // cozuluyor; cift filtrelemenin gecikmesine takilmasin.
+            armDetector.update(receivedPacket.LY, receivedPacket.RY, millis());
             applyOutputs(receivedPacket);
         }
         bytesProcessed++;
@@ -616,12 +960,12 @@ void loop()
         telemetry.voltageMv = (uint16_t)(getBatteryVoltage() * 1000.0f);
         telemetry.battTempCentiC = battTempCentiC;
         telemetry.escTempCentiC = escTempCentiC;
-        telemetry.mpuAx = imuAx;
-        telemetry.mpuAy = imuAy;
+        telemetry.mpuAx = subtractClamped(imuAx, accelOffsetX);
+        telemetry.mpuAy = subtractClamped(imuAy, accelOffsetY);
         telemetry.mpuAz = imuAz;
-        telemetry.mpuGx = imuGx;
-        telemetry.mpuGy = imuGy;
-        telemetry.mpuGz = imuGz;
+        telemetry.mpuGx = subtractClamped(imuGx, gyroBiasX);
+        telemetry.mpuGy = subtractClamped(imuGy, gyroBiasY);
+        telemetry.mpuGz = subtractClamped(imuGz, gyroBiasZ);
         telemetry.compassHeading = imuHeading;
         telemetry.gpsLatE7 = gpsLatE7;
         telemetry.gpsLonE7 = gpsLonE7;
@@ -629,6 +973,7 @@ void loop()
         telemetry.gpsSats = gpsSats;
         telemetry.pressurePa = baroPressurePa;
         telemetry.baroTempCentiC = baroTempCentiC;
+        telemetry.statusFlags = buildStatusFlags();
 
         sendFrame(radio::PACKET_TYPE_TELEMETRY, &telemetry, sizeof(TelemetryPacket));
 
@@ -639,5 +984,10 @@ void loop()
     if (millis() - lastPacketTime > RX_TIMEOUT_MS)
     {
         applyFailsafe();
+    }
+
+    if (millis() - lastPacketTime > DISARM_ON_LINK_LOSS_MS)
+    {
+        armDetector.disarm(millis());
     }
 }
