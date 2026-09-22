@@ -51,15 +51,39 @@ def test_old_shell_sits_in_the_d_frame():
 import controller_geom as geom
 
 
-def test_outer_skin_matches_the_specified_envelope():
+def test_outer_skin_spans_the_full_height():
     skin = geom.outer_skin()
-    low_x, low_y, low_z, high_x, high_y, high_z = skin.bounding_box()
-    assert low_x == pytest.approx(geom.OUTER_X[0], abs=0.02)
-    assert high_x == pytest.approx(geom.OUTER_X[1], abs=0.02)
-    assert low_y == pytest.approx(geom.OUTER_Y[0], abs=0.02)
-    assert high_y == pytest.approx(geom.OUTER_Y[1], abs=0.02)
+    _, low_y, low_z, _, high_y, high_z = skin.bounding_box()
     assert low_z == pytest.approx(datum.SHELL_BOTTOM_Z, abs=0.02)
     assert high_z == pytest.approx(datum.LID_TOP_Z, abs=0.02)
+    assert low_y == pytest.approx(geom.OUTER_Y[0], abs=0.02)
+    assert high_y == pytest.approx(geom.OUTER_Y[1], abs=0.02)
+
+
+def test_outline_is_narrow_at_the_screen_end_and_opens_toward_the_user():
+    """The flare is the whole point of the plan shape."""
+    assert geom.flare_at(geom.OUTER_Y[1]) == pytest.approx(0.0, abs=0.01)
+    assert geom.flare_at(geom.OUTER_Y[0]) == pytest.approx(geom.FLARE, abs=0.01)
+    outline = np.array(geom.plan_outline())
+    # Stops short of the very front, where the corner rounding turns the
+    # outline back in again.
+    ordered = []
+    for y in (135.0, 100.0, 60.0, 20.0, 5.0):
+        band = outline[np.abs(outline[:, 1] - y) < 4.0]
+        ordered.append(band[:, 0].max() - band[:, 0].min())
+    assert ordered == sorted(ordered), f"outline does not open out: {ordered}"
+    assert ordered[-1] - ordered[0] > 15.0
+
+
+def test_top_face_is_a_barrel_with_its_crest_on_the_centre_line():
+    centre = (geom.CAVITY_X[0] + geom.CAVITY_X[1]) / 2
+    assert geom.barrel_z(centre) == pytest.approx(datum.LID_TOP_Z, abs=0.01)
+    mesh = geom.to_trimesh(geom.outer_skin())
+    for x in (centre - 68.0, centre - 34.0, centre, centre + 34.0, centre + 68.0):
+        origins = np.array([[x, 68.0, 60.0]])
+        locations, _, _ = mesh.ray.intersects_location(
+            origins, np.array([[0.0, 0.0, -1.0]]))
+        assert locations[:, 2].max() == pytest.approx(geom.barrel_z(x), abs=0.05)
 
 
 def test_outer_skin_inset_shrinks_by_exactly_the_inset():
@@ -77,13 +101,23 @@ def test_outer_skin_side_walls_carry_the_draft():
     Sampled clear of the R3 edge rounding, which pulls the section in near
     the top and bottom faces and would swamp the angle being measured.
     """
-    skin = geom.outer_skin()
-    high_z = datum.LID_TOP_Z - geom.EDGE_R - 1.0
+    mesh = geom.to_trimesh(geom.outer_skin())
+    high_z = datum.LID_TOP_Z - geom.BARREL_DROP - geom.EDGE_R - 1.0
     low_z = datum.SHELL_BOTTOM_Z + geom.EDGE_R + 1.0
     expected = math.tan(math.radians(geom.DRAFT_DEG)) * (high_z - low_z)
-    top = geom.section_width(skin, high_z)
-    bottom = geom.section_width(skin, low_z)
-    assert (top - bottom) / 2 == pytest.approx(expected, abs=0.05)
+
+    # Measured by ray at one Y, because the outline's width also changes
+    # with Y and a section's vertices are sparse along the straight runs.
+    def half_width(z):
+        origin = np.array([[68.0, 68.0, z]])
+        hits = []
+        for direction in ([[1.0, 0.0, 0.0]], [[-1.0, 0.0, 0.0]]):
+            locations, _, _ = mesh.ray.intersects_location(
+                origin, np.array(direction))
+            hits.append(np.abs(locations[:, 0] - 68.0).max())
+        return sum(hits) / 2
+
+    assert half_width(high_z) - half_width(low_z) == pytest.approx(expected, abs=0.15)
 
 
 def test_spherical_dish_has_the_asked_for_depth_and_diameter():
@@ -204,10 +238,15 @@ def test_shell_floor_is_closed(shell):
     directions = np.tile([0.0, 0.0, -1.0], (len(grid), 1))
     locations, ray_index, _ = mesh.ray.intersects_location(grid, directions)
 
+    pilots = case.GRIP_SCREWS["left"] + case.GRIP_SCREWS["right"]
     open_points = []
     for index, point in enumerate(grid):
-        if len(locations[ray_index == index]) == 0:
-            open_points.append(point[:2].round(1).tolist())
+        if len(locations[ray_index == index]):
+            continue
+        # A grip screw's pilot goes right through the floor on purpose.
+        if any(math.dist(point[:2], pilot) < case.GRIP_PILOT_D for pilot in pilots):
+            continue
+        open_points.append(point[:2].round(1).tolist())
     assert not open_points, f"floor open under {open_points[:8]}"
 
 
@@ -295,7 +334,7 @@ def test_screen_window_is_smaller_than_the_module(lid):
     assert case.SCREEN_WINDOW[0] < 38.0
     assert case.SCREEN_WINDOW[1] < 12.0
     mesh = geom.to_trimesh(lid)
-    z = datum.LID_TOP_Z - case.SCREEN_PANEL_DEPTH - 0.5
+    z = geom.barrel_z(datum.SCREEN_CENTER[0]) - case.SCREEN_PANEL_DEPTH - 0.5
     windows = [high - low for low, high in datum.section_boxes(mesh, z)
                if abs((high - low)[0] - case.SCREEN_WINDOW[0]) < 0.4]
     assert len(windows) == 1
@@ -315,10 +354,44 @@ def test_screen_nest_is_a_step_between_the_collar_and_the_window(lid):
 
 
 def test_lid_top_carries_the_screen_panel_recess(lid):
+    """Sampled under the recess's lowest corner, since the face is curved.
+
+    The barrel drops about 1 mm across the recess's 46 mm, so there is no
+    single height at which the whole footprint is both open and surrounded
+    by material — except below the outboard end's own floor.
+    """
     mesh = geom.to_trimesh(lid)
-    sizes = {tuple((high - low).round(2))
-             for low, high in datum.section_boxes(mesh, datum.LID_TOP_Z - 0.5)}
-    assert case.SCREEN_PANEL in sizes
+    centre_x, centre_y = datum.SCREEN_CENTER
+    half_x = case.SCREEN_PANEL[0] / 2
+
+    # Inside the recess but clear of the window, the surface must sit one
+    # recess-depth below the barrel, at both ends as well as the middle.
+    for x in (centre_x - half_x + 2.0, centre_x, centre_x + half_x - 2.0):
+        origins = np.array([[x, centre_y + 8.0, 60.0]])
+        locations, _, _ = mesh.ray.intersects_location(
+            origins, np.array([[0.0, 0.0, -1.0]]))
+        top = locations[:, 2].max()
+        assert top == pytest.approx(geom.barrel_z(x) - case.SCREEN_PANEL_DEPTH,
+                                    abs=0.08), f"recess depth wrong at x={x}"
+
+    # And just outside it the surface is back up on the barrel.
+    origins = np.array([[centre_x + half_x + 4.0, centre_y + 8.0, 60.0]])
+    locations, _, _ = mesh.ray.intersects_location(
+        origins, np.array([[0.0, 0.0, -1.0]]))
+    assert locations[:, 2].max() == pytest.approx(
+        geom.barrel_z(centre_x + half_x + 4.0), abs=0.08)
+
+
+def test_lid_shell_keeps_its_thickness_across_the_barrel(lid):
+    """A flat plate would thin to nothing where the barrel falls away."""
+    mesh = geom.to_trimesh(lid)
+    for x in (10.0, 68.0, 126.0):
+        origins = np.array([[x, 90.0, 60.0]])
+        locations, _, _ = mesh.ray.intersects_location(
+            origins, np.array([[0.0, 0.0, -1.0]]))
+        crossings = sorted(locations[:, 2], reverse=True)
+        assert len(crossings) >= 2, f"no shell at x={x}"
+        assert crossings[0] - crossings[1] == pytest.approx(case.SKIRT_T, abs=0.15)
 
 
 def test_lid_leaves_the_usb_window_open(lid):
@@ -371,18 +444,16 @@ def test_grips_stay_inside_the_body_silhouette(grips):
     """
     low_x = grips["left"].bounding_box()[0]
     high_x = grips["right"].bounding_box()[3]
-    assert low_x == pytest.approx(-8.0, abs=0.5)
-    assert high_x == pytest.approx(144.0, abs=0.5)
-    assert high_x - low_x == pytest.approx(152.0, abs=1.0)
-    assert low_x >= geom.OUTER_X[0] - 1.5
-    assert high_x <= geom.OUTER_X[1] + 1.5
+    outline = np.array(geom.plan_outline())
+    assert low_x >= outline[:, 0].min()
+    assert high_x <= outline[:, 0].max()
 
 
 def test_grips_run_forward_toward_the_user(grips):
     """The lobe's length is in Y, which is where the hand actually wraps."""
     for grip in grips.values():
         low_x, low_y, _, high_x, high_y, _ = grip.bounding_box()
-        assert low_y == pytest.approx(-35.0, abs=0.5)
+        assert low_y == pytest.approx(-33.0, abs=0.5)
         assert high_y - low_y > high_x - low_x
 
 

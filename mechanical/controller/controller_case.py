@@ -37,8 +37,8 @@ LID_SCREW_PILOT_DEPTH = 12.0
 # Kept clear of the rounded bottom edge: the flat underside only starts at
 # y = 2.49, so a 10 mm pad centred below y = 7.5 would hang off the part.
 GRIP_SCREWS = {
-    "left": ((12.0, 9.0), (40.0, 16.0)),
-    "right": ((124.0, 9.0), (96.0, 16.0)),
+    "left": ((8.0, 8.0), (26.0, 16.0)),
+    "right": ((128.0, 8.0), (110.0, 16.0)),
 }
 GRIP_PAD_D = 10.0
 GRIP_PAD_TOP_Z = -12.0
@@ -74,14 +74,15 @@ LID_TEXT_POS = (68.0, 20.0)
 
 # --- grips ----------------------------------------------------------------
 # (x, y, z, radius); hulled together, then cut off at the shell's underside.
-# Runs down and toward the user rather than out to the side, so the grips
-# stay inside the body's silhouette instead of reading as wings.
+# Runs down and toward the user rather than out to the side: the flared
+# body already provides the width, so the grips add depth under its front
+# corners and stay inside the silhouette instead of reading as wings.
 GRIP_CHAIN_LEFT = (
-    (28.0, 14.0, -18.0, 20.0),
-    (22.0, 4.0, -20.0, 18.0),
-    (16.0, -6.0, -22.0, 16.0),
-    (10.0, -15.0, -24.0, 14.0),
-    (3.0, -24.0, -27.0, 11.0),
+    (22.0, 16.0, -18.0, 20.0),
+    (16.0, 6.0, -20.0, 18.0),
+    (10.0, -4.0, -22.0, 16.0),
+    (4.0, -13.0, -24.0, 14.0),
+    (-3.0, -22.0, -27.0, 11.0),
 )
 GRIP_MIRROR_X = 136.0
 GRIP_WALL = 2.5
@@ -183,7 +184,11 @@ def _centred_box(centre, size, z0, z1):
 def build_lid():
     band = box(-40.0, 180.0, -40.0, 180.0, datum.LID_SKIRT_BOTTOM_Z, datum.LID_TOP_Z)
     hollow = box(-40.0, 180.0, -40.0, 180.0,
-                 datum.LID_SKIRT_BOTTOM_Z - 1.0, datum.LID_PLATE_BOTTOM_Z)
+                 datum.LID_SKIRT_BOTTOM_Z - 1.0, datum.LID_TOP_Z + 1.0)
+    # The shell is a constant 2 mm everywhere rather than a flat plate on a
+    # skirt: with a barrelled top face a plate of fixed underside would run
+    # out to nothing where the barrel drops below it, which it does well
+    # inside the pocket's own width.
     lid = (geom.outer_skin() ^ band) - (geom.outer_skin(SKIRT_T) ^ hollow)
 
     # Overlaps the plate by 0.5 mm; a coplanar union would be degenerate.
@@ -194,21 +199,28 @@ def build_lid():
                         datum.WALL_TOP_Z - 1.0, SCREEN_NEST_TOP_Z)
     cuts += _centred_box(datum.SCREEN_CENTER, SCREEN_WINDOW,
                          SCREEN_NEST_TOP_Z, datum.LID_TOP_Z + 1.0)
-    cuts += _centred_box(datum.SCREEN_CENTER, SCREEN_PANEL,
-                         datum.LID_TOP_Z - SCREEN_PANEL_DEPTH, datum.LID_TOP_Z + 1.0)
+    # Everything that lives on the top face is clipped to a shell of its own
+    # depth taken from the surface. The barrel's height varies across the
+    # part, so a feature cut to a fixed plane runs out through the edge at
+    # one end and never reaches the surface at the other.
+    tall = (datum.LID_PLATE_BOTTOM_Z - 2.0, datum.LID_TOP_Z + 2.0)
+    cuts += (_centred_box(datum.SCREEN_CENTER, SCREEN_PANEL, *tall)
+             - geom.lowered_skin(SCREEN_PANEL_DEPTH))
 
     for x, y in STICK_NEW:
         cuts += cyl(STICK_BORE_D, 8.0, x, y, datum.LID_PLATE_BOTTOM_Z - 2.0)
-        cuts += geom.spherical_dish(x, y, datum.LID_TOP_Z, DISH_D, DISH_DEPTH)
+        cuts += (geom.spherical_dish(x, y, geom.barrel_z(x), DISH_D, DISH_DEPTH)
+                 - geom.lowered_skin(DISH_DEPTH))
 
     for x, y in LID_SCREWS:
-        cuts += cyl(LID_SCREW_CLEAR_D, 6.0, x, y, datum.LID_PLATE_BOTTOM_Z - 1.0)
-        cuts += cyl(LID_SCREW_HEAD_D, LID_SCREW_HEAD_DEPTH + 1.0, x, y,
-                    datum.LID_TOP_Z - LID_SCREW_HEAD_DEPTH)
+        cuts += cyl(LID_SCREW_CLEAR_D, 8.0, x, y, datum.LID_PLATE_BOTTOM_Z - 3.0)
+        cuts += (cyl(LID_SCREW_HEAD_D, tall[1] - tall[0], x, y, tall[0])
+                 - geom.lowered_skin(LID_SCREW_HEAD_DEPTH))
 
     cuts += usb_slot()
-    cuts += geom.text_solid(LID_TEXT, LID_TEXT_SIZE, LID_TEXT_POS[0], LID_TEXT_POS[1],
-                            datum.LID_TOP_Z - TEXT_DEPTH, datum.LID_TOP_Z + 0.01)
+    cuts += (geom.text_solid(LID_TEXT, LID_TEXT_SIZE, LID_TEXT_POS[0], LID_TEXT_POS[1],
+                             *tall)
+             - geom.lowered_skin(TEXT_DEPTH))
 
     # One subtraction, not a chain of them. manifold3d evaluates lazily, and
     # a long chain of differences batches into a single pass that leaves
