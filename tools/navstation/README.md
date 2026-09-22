@@ -10,7 +10,16 @@ panellerle gösterir, GY-85 kalibrasyonunu tetikler.
 
 ## Çalıştırma
 
-`tools/` dizininden:
+Repo kökünden:
+
+    ./tools/run_navstation.sh
+
+Bu betik nereden çağrılırsa çağrılsın doğru dizine geçip programı başlatır.
+`navstation` bir Python paketi ve yalnız `tools/` içinden import edilebiliyor;
+repo kökünden doğrudan `python -m navstation` demek
+`No module named navstation` verir.
+
+Doğrudan çalıştırmak istersen `tools/` dizininden:
 
     ../.env/bin/python -m navstation
 
@@ -23,7 +32,7 @@ görünürler ama kumanda değillerdir.
 
 Portu baştan biliyorsan atlayabilirsin:
 
-    ../.env/bin/python -m navstation --port /dev/cu.usbserial-XXXX
+    ./tools/run_navstation.sh --port /dev/cu.usbserial-XXXX
 
 Port açılamazsa program çıkmaz; hatayı durum satırında gösterir ve başka bir
 port seçebilirsin.
