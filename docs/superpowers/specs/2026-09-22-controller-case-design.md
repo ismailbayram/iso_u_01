@@ -199,10 +199,12 @@ altına giren ayrı bir tabla basılıyor; kullanıcı modülü elle bu tablaya 
 
 Kapak tarafı:
 
-- Kapak alt yüzünde **39.2 × 13.2 mm, z = 17.0 … 21.0 (4 mm derin) cep**. Modülün PCB üst
-  yüzü bu cebin tavanına dayanır.
-- Cebin içinden geçen pencere **36.5 × 10.5 mm** — çevrede 1.35 mm dudak kalır, modül
-  yukarı düşmez, PCB kenarı gizlenir.
+- Kapak plakasının alt yüzünden aşağı sarkan **44.2 × 18.2 mm dış ölçülü bilezik**,
+  z = 16.0 … 21.0.
+- Bileziğin içinde iki kademeli delik: **39.2 × 13.2 mm yuva z = 16.0 … 17.0** ve üstünde
+  **36.5 × 10.5 mm pencere z = 17.0 … 23.0**. Modül aşağıdan yuvaya girer, PCB üst yüzü
+  z = 17.0'daki omuza dayanır; çevrede 1.35 mm dudak kalır, modül yukarı geçmez ve PCB
+  kenarı gizlenir. Yuvanın 1 mm'lik derinliği modülü yanal olarak da tutar.
 - Kapak üst yüzünde pencerenin çevresinde **46 × 20 mm, 1.0 mm gömme panel alanı**. Düz
   basılmış bu çerçeve göz için referans olur; modülde kalan birkaç onda derecelik kaçıklık
   okunmaz.
@@ -239,18 +241,24 @@ Kapak tarafı:
 
 Her kabza gövdeye **2 × M3 × 14** ile bağlanır. Vidalar kabzanın içinden +Z yönünde geçip
 gövdenin taban plakasındaki yerel pedlere girer: ped Ø10, z = −20 … −12, pilot delik Ø2.5,
-derinlik 7 mm. Ek olarak her kabzanın kök yüzünde 1 adet Ø4 × 6 hizalama pimi, gövde
-tabanındaki Ø4.2 × 6.5 körlü deliğe oturur — kabza dönmez, kesme yükü vidadan alınır.
+derinlik 7 mm.
 
-| Parça | Vida 1 | Vida 2 | Pim |
-|---|---|---|---|
-| Sol kabza | (12.0, 8.0) | (38.0, 4.0) | (26.0, 4.0) |
-| Sağ kabza | (124.0, 8.0) | (98.0, 4.0) | (110.0, 4.0) |
+| Parça | Vida 1 | Vida 2 |
+|---|---|---|
+| Sol kabza | (12.0, 8.0) | (38.0, 4.0) |
+| Sağ kabza | (124.0, 8.0) | (98.0, 4.0) |
 
-Üçü de kabzanın z = −20'deki düz kök izinin ve gövdenin taban yüzeyinin ortak alanı
+İkisi de kabzanın z = −20'deki düz kök izinin ve gövdenin taban yüzeyinin ortak alanı
 içindedir. Pedler z = −20 … −12 bandında kalır; 3.2'deki kart direkleri (z = −18.5 … 0)
 ile aynı XY bölgesinde olsalar bile ikisi tek gövde olarak birleşir, çakışma sorunu
 oluşmaz. 4.4'teki kapak vidası kuleleri (y = 30 ve 105, z = 16 … 23) çok uzakta.
+
+**Hizalama pimi yok.** Kabza düz kök yüzü tablada basıldığı için kök yüzünden dışarı
+çıkacak bir pim bası düzleminin altına düşerdi. İki vida zaten dönmeyi engelliyor.
+
+Kabzanın kökü z = −30 … −20 arasında **dolu** basılır; vida yuvaları bu dolu bölgede durur,
+böylece serbest kule sorunu oluşmaz. Vida başı için Ø6.5 havşa z = −30 … −26, geçme deliği
+Ø3.4 z = −26 … −20. Kalan hacim (z < −30) 2.5 mm duvarlı ve içi boştur.
 
 ## 7. Üretim ve baskı yönü
 
