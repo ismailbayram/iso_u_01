@@ -137,8 +137,8 @@ Köşe yarıçapı 4 mm ile sınırlı: kartın köşesi cebin köşesinden (1.5
 yuvarlatma yayının merkezine 3.54 mm uzaklıkta. R6 kullanılsaydı yay kartın dört köşesini
 keserdi.
 
-Kart, 3.2'deki dört direğe (Ø5 dış, M3 sac vidası için Ø2.6 pilot delik, üst yüz z = 0)
-oturur.
+Kart, 3.2'deki dört direğe (Ø5 dış, **M2 sac vidası** için Ø1.7 pilot delik, derinlik
+6 mm, üst yüz z = 0) oturur. Kart bir kez takıldığı için insert somun kullanılmıyor.
 
 ### 4.2 Dış hat
 
@@ -217,7 +217,12 @@ birleştiren doğruya paraleldir. Tam yükseklik üzerinden hesaplanırsa duvar 
 
 ### 4.4 Kapak vidaları
 
-4 adet **M3 × 16** sac vidası, sol ve sağ duvarın (7 mm) içindeki kulelere:
+4 adet **M2 vida**, gövde tarafında **ısıyla gömülen insert somun** (Ø3.5) ile. Kapak
+defalarca açılacak — kart, ekran şimi, kablo — ve plastiğe kendi dişini açan vida birkaç
+sökme-takmada sıyırır. Kutudaki diğer iki bağlantı (kart direği, kabza) bir kez takıldığı
+için düz vidayla kalıyor; böylece 10 değil 4 insert gerekiyor.
+
+Kuleler sol ve sağ duvarın içinde:
 
 | # | x | y |
 |---|---|---|
@@ -226,9 +231,27 @@ birleştiren doğruya paraleldir. Tam yükseklik üzerinden hesaplanırsa duvar 
 | 3 | 138.5 | 30.0 |
 | 4 | 138.5 | 105.0 |
 
-Gövde tarafı Ø6 kule + Ø2.5 pilot, kapak tarafı Ø3.4 geçme + Ø6 × 0.8 havşa. Havşa sığ:
-kapak plakası 2.0 mm ve daha derin bir havşa plakayı tümden deler, vida başına yatak
-kalmaz. Başlar 0.8 mm gömülü durur, tam sıfır değil. Kuleler dış
+| Parça | Ölçü |
+|---|---|
+| Kule dış çapı | Ø7.0 |
+| Insert deliği | Ø3.2, derinlik 5 mm (z = 16 … 11) |
+| Vida ucu boşluğu | Ø2.4, insertin altında 4 mm |
+| Kapak geçme deliği | Ø2.4 |
+| Havşa | Ø4.5 × 1.0 |
+
+Insert deliği çapı somunun tırtılına göre değişir; **dört tanesini basmadan önce bir tane
+deneyip ölç**.
+
+#### Vida başı pabuçları
+
+Vida başları kapağın üst yüzüne doğrudan oturmuyor; her birinin altında **Ø8, 0.4 mm
+taşan düz bir pabuç** var, havşa da pabucun içine açılıyor.
+
+Sebebi: y = 105'teki iki vida 8 mm'lik kenar yuvarlatmasının (4.2) içine düşüyor. Orada üst
+yüzey tek bir vida başı boyunca **1.7 mm** alçalıyor, kapak ise 2.0 mm kalınlığında — düz
+tabanlı bir havşa sığ taraftan kabuğu delip geçiyor. Pabuç bunu kabuğu inceltmeden çözüyor;
+dördü de aynı olduğu için yama değil kasıtlı detay gibi duruyor. Her vida başının altında
+1.9 mm et kalıyor. Kuleler dış
 kabuğa göre kırpılır (4.2'deki küre kabuğu ile kesişim), böylece 5°'lik eğim yüzünden
 duvardan dışarı taşmazlar. Kule x merkezi cebin kenarından 2.5 mm dışarıda; Ø6 kule cebe
 0.5 mm girer, kartın kenarına 1.0 mm boşluk kalır.
@@ -296,9 +319,9 @@ Kapak tarafı:
 
 ### 6.1 Bağlantı
 
-Her kabza gövdeye **2 × M3 × 14** ile bağlanır. Vidalar kabzanın içinden +Z yönünde geçip
-gövdenin taban plakasındaki yerel pedlere girer: ped Ø10, z = −20 … −12, pilot delik Ø2.5,
-derinlik 7 mm.
+Her kabza gövdeye **2 × M2 vida** ile bağlanır. Vidalar kabzanın içinden +Z yönünde geçip
+gövdenin taban plakasındaki yerel pedlere girer: ped Ø10, z = −20 … −12, pilot delik Ø1.7,
+derinlik 6 mm. Kabza bir kez takıldığı için insert yok.
 
 | Parça | Vida 1 | Vida 2 |
 |---|---|---|
@@ -316,8 +339,8 @@ oluşmaz. 4.4'teki kapak vidası kuleleri (y = 30 ve 105, z = 16 … 23) çok uz
 çıkacak bir pim bası düzleminin altına düşerdi. İki vida zaten dönmeyi engelliyor.
 
 Kabzanın kökü z = −30 … −20 arasında **dolu** basılır; vida yuvaları bu dolu bölgede durur,
-böylece serbest kule sorunu oluşmaz. Vida başı için Ø6.5 havşa z = −30 … −26, geçme deliği
-Ø3.4 z = −26 … −20. Kalan hacim (z < −30) 2.5 mm duvarlı ve içi boştur.
+böylece serbest kule sorunu oluşmaz. Vida başı için Ø4.5 havşa z = −30 … −26, geçme deliği
+Ø2.4 z = −26 … −20. Kalan hacim (z < −30) 2.5 mm duvarlı ve içi boştur.
 
 ## 7. Üretim ve baskı yönü
 
@@ -376,7 +399,8 @@ Ayrıca geometri kontrolü: her parça su geçirmez (`is_watertight`) ve tek gö
 
 ### 8.2 Montaj sırası
 
-1. `screen_shim`'i karta yapıştır, OLED modülünü üstüne bastır.
-2. Kartı gövdenin dört direğine 4 × M3 sac vidası ile tuttur.
-3. Kapağı geçir, 4 × M3 × 16 ile sık.
-4. Kabzaları 2 × M3 × 14 ile gövdeye bağla.
+1. Gövdenin dört kapak kulesine 4 × M2 insert somunu havya ile gömle.
+2. `screen_shim`'i karta yapıştır, OLED modülünü üstüne bastır.
+3. Kartı gövdenin dört direğine 4 × M2 sac vidası ile tuttur.
+4. Kapağı geçir, 4 × M2 ile insertlere sık.
+5. Kabzaları 2'şer M2 sac vidası ile gövdeye bağla.
