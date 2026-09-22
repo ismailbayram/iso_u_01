@@ -100,3 +100,71 @@ def test_text_solid_is_not_empty_and_lands_where_asked():
     assert (low_x + high_x) / 2 == pytest.approx(68.0, abs=0.5)
     assert low_z == pytest.approx(0.0, abs=0.01)
     assert high_z == pytest.approx(0.6, abs=0.01)
+
+
+import controller_case as case
+
+
+@pytest.fixture(scope="module")
+def shell():
+    return case.build_shell()
+
+
+def test_shell_is_a_single_watertight_body(shell):
+    mesh = geom.to_trimesh(shell)
+    assert mesh.is_watertight
+    assert mesh.body_count == 1
+
+
+def test_shell_occupies_the_specified_envelope(shell):
+    """The shell spans floor to wall top and stays inside the outer skin.
+
+    It is narrower than the 150 mm envelope: the widest section of the part
+    is the top of the lid, and the draft pulls everything below it in. The
+    shell's own widest point is the bottom of the skirt rebate.
+    """
+    low_x, low_y, low_z, high_x, high_y, high_z = shell.bounding_box()
+    assert low_z == pytest.approx(datum.SHELL_BOTTOM_Z, abs=0.05)
+    assert high_z == pytest.approx(datum.WALL_TOP_Z, abs=0.05)
+    assert (shell - geom.outer_skin()).volume() == pytest.approx(0.0, abs=1.0)
+
+    widest = geom.section_width(geom.outer_skin(), datum.LID_SKIRT_BOTTOM_Z)
+    assert high_x - low_x == pytest.approx(widest, abs=0.05)
+
+
+def test_shell_leaves_room_for_the_board(shell):
+    """A 133 mm slab at the seating plane must not touch the shell."""
+    centre_x = sum(p[0] for p in datum.BOARD_POSTS) / 4
+    centre_y = sum(p[1] for p in datum.BOARD_POSTS) / 4
+    board = geom.box(centre_x - 66.5, centre_x + 66.5,
+                     centre_y - 66.5, centre_y + 66.5,
+                     datum.BOARD_SEAT_Z, datum.BOARD_SEAT_Z + datum.BOARD_T)
+    assert (board ^ shell).volume() == pytest.approx(0.0, abs=1.0)
+
+
+def test_shell_posts_reach_the_seating_plane(shell):
+    mesh = geom.to_trimesh(shell)
+    boxes = datum.section_boxes(mesh, datum.BOARD_SEAT_Z - 0.5)
+    posts = [((low + high) / 2).round(2) for low, high in boxes
+             if abs((high - low)[0] - datum.POST_OD) < 0.6
+             and abs((high - low)[1] - datum.POST_OD) < 0.6]
+    assert len(posts) == 4
+    for got in sorted(tuple(p) for p in posts):
+        assert min(math.dist(got, want) for want in datum.BOARD_POSTS) < 0.2
+
+
+def test_shell_keeps_the_antenna_channel_open(shell):
+    """Everything the old shell left open in the channel region stays open."""
+    old = datum.to_manifold(datum.load_old(datum.OLD_DIR / "kumanda_alt.stl"))
+    opening = geom.box(*datum.CHANNEL_REGION) - old
+    assert (opening ^ shell).volume() == pytest.approx(0.0, abs=1.0)
+
+
+def test_shell_has_four_lid_screw_pilots(shell):
+    mesh = geom.to_trimesh(shell)
+    boxes = datum.section_boxes(mesh, datum.WALL_TOP_Z - 2.0)
+    pilots = [((low + high) / 2).round(2) for low, high in boxes
+              if abs((high - low)[0] - case.LID_SCREW_PILOT_D) < 0.4]
+    assert len(pilots) == 4
+    for got in sorted(tuple(p) for p in pilots):
+        assert min(math.dist(got, want) for want in case.LID_SCREWS) < 0.2

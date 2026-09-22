@@ -141,5 +141,12 @@ def section_width(solid, z):
 
 
 def to_trimesh(solid):
+    """Wrap a Manifold's mesh without letting trimesh touch it.
+
+    `process=True` would merge vertices that manifold3d deliberately keeps
+    apart — two surfaces meeting at a point get welded into a non-manifold
+    edge, and the result stops being watertight.
+    """
     mesh = solid.to_mesh()
-    return trimesh.Trimesh(vertices=mesh.vert_properties[:, :3], faces=mesh.tri_verts)
+    return trimesh.Trimesh(vertices=mesh.vert_properties[:, :3],
+                           faces=mesh.tri_verts, process=False)
