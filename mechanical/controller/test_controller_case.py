@@ -252,3 +252,55 @@ def test_lid_keeps_the_antenna_channel_open(lid):
     old = datum.to_manifold(datum.load_old(datum.OLD_DIR / "kumanda_alt.stl"))
     opening = geom.box(*datum.CHANNEL_REGION) - old
     assert (opening ^ lid).volume() == pytest.approx(0.0, abs=1.0)
+
+
+@pytest.fixture(scope="module")
+def grips():
+    return {side: case.build_grip(side) for side in ("left", "right")}
+
+
+@pytest.mark.parametrize("side", ["left", "right"])
+def test_grip_is_a_single_watertight_body(grips, side):
+    mesh = geom.to_trimesh(grips[side])
+    assert mesh.is_watertight
+    assert mesh.body_count == 1
+
+
+@pytest.mark.parametrize("side", ["left", "right"])
+def test_grip_stays_below_the_shell(grips, side):
+    _, _, low_z, _, _, high_z = grips[side].bounding_box()
+    assert high_z == pytest.approx(datum.SHELL_BOTTOM_Z, abs=0.05)
+    assert low_z == pytest.approx(-38.0, abs=0.5)
+
+
+def test_grips_reach_the_specified_width(grips):
+    low_x = grips["left"].bounding_box()[0]
+    high_x = grips["right"].bounding_box()[3]
+    assert low_x == pytest.approx(-25.0, abs=0.5)
+    assert high_x == pytest.approx(161.0, abs=0.5)
+    assert high_x - low_x == pytest.approx(186.0, abs=1.0)
+
+
+def test_grips_are_mirror_images(grips):
+    left = grips["left"].bounding_box()
+    right = grips["right"].bounding_box()
+    assert left[0] + right[3] == pytest.approx(case.GRIP_MIRROR_X, abs=0.05)
+    assert left[1] == pytest.approx(right[1], abs=0.05)
+
+
+@pytest.mark.parametrize("side", ["left", "right"])
+def test_grip_does_not_intersect_the_shell(shell, grips, side):
+    assert (shell ^ grips[side]).volume() == pytest.approx(0.0, abs=1.0)
+
+
+@pytest.mark.parametrize("side", ["left", "right"])
+def test_grip_screw_seats_are_deep_enough_to_take_an_m3x14(side):
+    """Each seat needs 10 mm of grip below the shell's underside.
+
+    Measured against the grip's envelope, not the finished part: the head
+    counterbore has already hollowed out the volume the screw head needs.
+    """
+    envelope = case.grip_envelope(side)
+    for x, y in case.GRIP_SCREWS[side]:
+        probe = geom.cyl(case.GRIP_HEAD_D, 0.5, x, y, case.GRIP_HEAD_Z)
+        assert (probe - envelope).volume() == pytest.approx(0.0, abs=0.3)

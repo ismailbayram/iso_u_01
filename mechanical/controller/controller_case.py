@@ -72,6 +72,22 @@ LID_TEXT = "ISO U1"
 LID_TEXT_SIZE = 10.0
 LID_TEXT_POS = (68.0, 20.0)
 
+# --- grips ----------------------------------------------------------------
+# (x, y, z, radius); hulled together, then cut off at the shell's underside.
+GRIP_CHAIN_LEFT = (
+    (30.0, 14.0, -22.0, 16.0),
+    (20.0, 3.0, -24.0, 14.0),
+    (8.0, -8.0, -26.0, 12.0),
+    (-5.0, -17.0, -28.0, 10.0),
+    (-17.0, -25.0, -30.0, 8.0),
+)
+GRIP_MIRROR_X = 136.0
+GRIP_WALL = 2.5
+GRIP_SOLID_ROOT_Z = -30.0
+GRIP_CLEAR_D = 3.4
+GRIP_HEAD_D = 6.5
+GRIP_HEAD_Z = -30.0
+
 
 def shell_outer_surface():
     """The shell's outer skin: full size up to the skirt, rebated above it."""
@@ -164,3 +180,37 @@ def build_lid():
     lid -= geom.text_solid(LID_TEXT, LID_TEXT_SIZE, LID_TEXT_POS[0], LID_TEXT_POS[1],
                            datum.LID_TOP_Z - TEXT_DEPTH, datum.LID_TOP_Z + 0.01)
     return lid
+
+
+def grip_chain(side):
+    if side == "left":
+        return GRIP_CHAIN_LEFT
+    return tuple((GRIP_MIRROR_X - x, y, z, r) for x, y, z, r in GRIP_CHAIN_LEFT)
+
+
+def grip_envelope(side):
+    """The grip's outer solid, before it is hollowed or drilled."""
+    return geom.hull_of_spheres(grip_chain(side))
+
+
+def build_grip(side):
+    """One bolt-on grip, cut flat where it meets the shell's underside.
+
+    The flat root is what makes it printable: stood on that face it is a
+    dome that narrows as it rises, with nothing overhanging. Its first
+    10 mm are solid so the screw seats have something to hold on to.
+    """
+    chain = grip_chain(side)
+    outer = grip_envelope(side)
+    inner = geom.hull_of_spheres(
+        tuple((x, y, z, r - GRIP_WALL) for x, y, z, r in chain))
+    below = box(-60.0, 200.0, -60.0, 200.0, -60.0, datum.SHELL_BOTTOM_Z)
+    root = box(-60.0, 200.0, -60.0, 200.0, GRIP_SOLID_ROOT_Z, datum.SHELL_BOTTOM_Z)
+
+    grip = ((outer - inner) + (outer ^ root)) ^ below
+
+    for x, y in GRIP_SCREWS[side]:
+        grip -= cyl(GRIP_CLEAR_D, datum.SHELL_BOTTOM_Z - GRIP_HEAD_Z + 1.0,
+                    x, y, GRIP_HEAD_Z)
+        grip -= cyl(GRIP_HEAD_D, 4.0, x, y, GRIP_HEAD_Z - 0.5)
+    return grip
