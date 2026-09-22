@@ -1334,3 +1334,42 @@ Plan bittiğinde şunlar doğrulanmış olur:
 | 8 çıktı dosyaları | `test_cli_writes_every_part` |
 
 Doğrulanmayan, gözle bakılacak tek şey estetik: `controller_case_preview.png`. Kabza kavisi veya başparmak çukuru kötü görünürse `GRIP_CHAIN_LEFT` ve `DISH_D` / `DISH_DEPTH` sabitleri tek tek değiştirilip script yeniden çalıştırılır; başka hiçbir yere dokunmak gerekmez.
+
+---
+
+## Uygulama sonucu
+
+Plan 2026-09-22'de `worktree-controller-case` dalında uygulandı. Yedi task, 47 test.
+`python mechanical/controller/controller_case.py --check` yedi STL ve önizlemeyi üretiyor,
+doğrulama geçiyor.
+
+| Parça | Hacim |
+|---|---|
+| `controller_shell.stl` | 86.0 cm³ |
+| `controller_lid.stl` | 45.5 cm³ |
+| `controller_grip_left/right.stl` | 23.7 cm³ (her biri) |
+| `screen_shim_133/138/143.stl` | 2.3 / 2.4 / 2.5 cm³ |
+
+Planı yazarken öngörülemeyen, testlerin veya önizlemenin yakaladığı beş düzeltme:
+
+1. **Eğim açısı.** `outer_skin` eğimi parçanın tam yüksekliği üzerinden hesaplıyordu, ama
+   duvar iki küre halkasının ortak teğeti, yani merkez aralığı üzerinden hesaplanmalı.
+   Duvar 5° yerine 5.8° çıkıyordu. (Task 2)
+2. **`to_trimesh` parçayı bozuyordu.** trimesh'in varsayılan `process=True` ayarı,
+   manifold3d'in kasten ayrı tuttuğu köşeleri kaynatıp geçerli bir katıyı manifold
+   olmayan bir ağa çeviriyordu. Ham çıktı zaten su geçirmezdi. (Task 3)
+3. **Kabza pedleri parçadan sarkıyordu.** Gövdenin düz alt yüzü, yuvarlatılmış kenar
+   yüzünden ancak y = 2.49'da başlıyor; y = 4'teki Ø10 pedler 70 mm³ dışarı taşıyordu.
+   Vidalar (12, 9) ve (40, 16)'ya alındı, pedler ayrıca dış kabuğa kırpıldı. (Task 3)
+4. **Kabza formu.** İlk önizlemede kabzalar yana açılıp kanat gibi okunuyordu. Zincir
+   aşağı ve kullanıcıya doğru çevrildi; toplam genişlik 186 mm'den 152 mm'ye indi ve
+   kabzalar gövde siluetinin içinde kaldı. (Task 7)
+5. **Önizleme gölgelendirmesi.** Normalin Z bileşeni üzerinden gölgeleme bütün üst
+   yüzeyleri aynı tonda bırakıp kabartmayı gizliyordu; eksen dışı bir ışığa çevrildi.
+   (Task 7)
+
+Spec bu beş maddeye göre güncellendi; plan ile spec aynı geometriyi anlatıyor.
+
+Gözle bakılacak tek şey estetik: `mechanical/controller/controller_case_preview.png`.
+Kabza kavisi veya başparmak çukuru beğenilmezse `GRIP_CHAIN_LEFT` ve `DISH_D` /
+`DISH_DEPTH` sabitleri değiştirilip script yeniden çalıştırılır.

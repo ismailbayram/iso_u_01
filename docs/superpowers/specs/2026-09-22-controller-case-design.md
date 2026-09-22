@@ -144,13 +144,21 @@ oturur.
   kulelerini duvarın içinde taşımak için; böylece cep temiz bir dikdörtgen kalır ve kartın
   kenarına hiçbir çıkıntı girmez (eski tasarımda vida kuleleri cebe 5.8 mm taşıyordu).
 - Dış gövde: **150.0 × 142.0 mm**, toplam yükseklik z = −20 … 23, yani **43 mm** (eski 59).
+  Bu ölçü kapağın üst yüzünde geçerli; 5°'lik eğim yüzünden aşağı inildikçe daralır, gövde
+  parçasının kendi en geniş kesiti (z = 11) 148.4 mm'dir.
 - Plan köşeleri **R14**.
 - Yan duvarlar aşağı doğru **5° içe eğimli** (draft). Kalınlık değişmez, siluet incelir.
 - Üst ve alt kenarlar **R3** yuvarlatılmış.
 
 Geometri, üst ve alt dış hat boyunca dizilmiş r = 3 mm küre kümesinin dışbükey kabuğu
-(`Manifold.hull`) olarak kurulur: taper, R14 plan köşesi ve R3 kenar yuvarlaması tek
-işlemde çıkar.
+(`Manifold.batch_hull`) olarak kurulur: taper, R14 plan köşesi ve R3 kenar yuvarlaması tek
+işlemde çıkar. Kürelerin yarıçapını d kadar küçültmek yüzeyi tam d kadar içeri ofsetler;
+duvar, kapak eteği ve geçme boşluğu bundan türer.
+
+Eğim, iki küre halkasının **merkez aralığı** (37 mm) üzerinden hesaplanır, parçanın tam
+yüksekliği (43 mm) üzerinden değil: duvar iki halkanın ortak teğeti olduğu için merkezleri
+birleştiren doğruya paraleldir. Tam yükseklik üzerinden hesaplanırsa duvar 5° değil 5.8°
+çıkar.
 
 ### 4.3 Kapak
 
@@ -223,21 +231,26 @@ Kapak tarafı:
 - Geometri: kavis boyunca dizilmiş 5 kürenin dışbükey kabuğu, **z = −20 düzleminde
   kesilmiş**. Kesme düzlemi gövdenin dış taban yüzeyi; kabzanın gövdeye bakan yüzü böylece
   **düz** olur.
+- Kabza **aşağı ve kullanıcıya doğru** iner, yana açılmaz. İlk denemede zincir yana
+  açılıyordu ve önizlemede kabzalar tutamak değil kanat gibi okunuyordu; ayrıca tablada
+  gereksiz yer kaplıyordu.
 - Sol kabza küre zinciri (merkez x, y, z ve yarıçap, D çerçevesinde):
 
   | x | y | z | r |
   |---|---|---|---|
-  | 30.0 | 14.0 | −22.0 | 16.0 |
-  | 20.0 | 3.0 | −24.0 | 14.0 |
-  | 8.0 | −8.0 | −26.0 | 12.0 |
-  | −5.0 | −17.0 | −28.0 | 10.0 |
-  | −17.0 | −25.0 | −30.0 | 8.0 |
+  | 28.0 | 14.0 | −18.0 | 20.0 |
+  | 22.0 | 4.0 | −20.0 | 18.0 |
+  | 16.0 | −6.0 | −22.0 | 16.0 |
+  | 10.0 | −15.0 | −24.0 | 14.0 |
+  | 3.0 | −24.0 | −27.0 | 11.0 |
 
   Sağ kabza bu zincirin x = 68.0 düzlemine göre aynası (x' = 136.0 − x).
-- Sonuçlanan sınırlar: en alçak nokta **z = −38**, en dış nokta **x = −25** (sağda 161),
-  yani her kabza gövdeden **18 mm** taşar. Kabzalarla toplam genişlik **186 mm**, toplam
-  yükseklik **61 mm**.
-- Kesit çapı kökte 32 mm, uçta 16 mm; gövdenin altından ölçülen derinlik 18 mm.
+- Sonuçlanan sınırlar: en alçak nokta **z = −38**, en dış nokta **x = −8** (sağda 144).
+  Kapağın kenarı x = −7'de olduğu için kabza siluetin yalnızca 1 mm dışına taşar.
+  Kabzalarla toplam genişlik **152 mm**, toplam yükseklik **61 mm**.
+- Kabza Y'de y = −35'e kadar uzanır, yani gövdenin ön kenarından 32 mm ileri. Lobun uzun
+  ekseni Y'dedir; el oraya sarılır.
+- Kesit çapı kökte 40 mm, uçta 22 mm; gövdenin altından ölçülen derinlik 18 mm.
 - Duvar 2.5 mm, içi boş (dış kabuk ile yarıçapları 2.5 mm küçültülmüş iç kabuk arasındaki
   fark), gövdeye bakan yüzü açık.
 - **Fileto yok.** Kabza ayrı parça olduğu için gövde ile arasında düz bir ayrım çizgisi
@@ -252,11 +265,13 @@ derinlik 7 mm.
 
 | Parça | Vida 1 | Vida 2 |
 |---|---|---|
-| Sol kabza | (12.0, 8.0) | (38.0, 4.0) |
-| Sağ kabza | (124.0, 8.0) | (98.0, 4.0) |
+| Sol kabza | (12.0, 9.0) | (40.0, 16.0) |
+| Sağ kabza | (124.0, 9.0) | (96.0, 16.0) |
 
 İkisi de kabzanın z = −20'deki düz kök izinin ve gövdenin taban yüzeyinin ortak alanı
-içindedir. Pedler z = −20 … −12 bandında kalır; 3.2'deki kart direkleri (z = −18.5 … 0)
+içindedir. Y değerleri kasıtlı olarak 9'dan küçük değil: gövdenin düz alt yüzü, yuvarlatılmış
+kenar yüzünden ancak y = 2.49'da başlıyor, dolayısıyla Ø10 pedin merkezi y = 7.5'in altına
+inerse ped parçanın dışına sarkıyor. Pedler z = −20 … −12 bandında kalır; 3.2'deki kart direkleri (z = −18.5 … 0)
 ile aynı XY bölgesinde olsalar bile ikisi tek gövde olarak birleşir, çakışma sorunu
 oluşmaz. 4.4'teki kapak vidası kuleleri (y = 30 ve 105, z = 16 … 23) çok uzakta.
 
@@ -284,7 +299,7 @@ destek almaz; ayrıca ergonomi tutmazsa yalnız kabza yeniden basılıyor ve ist
 farklı renk kullanılabiliyor.
 
 Tabla gereksinimi: en büyük parça `controller_lid`, 154.4 × 146.4 mm. 220 × 220 tablaya
-sığar.
+sığar. Kabzalar siluetin içinde kaldığı için gövde de 148.4 × 140.4 mm ile sınırlıdır.
 
 ## 8. Uygulama
 
