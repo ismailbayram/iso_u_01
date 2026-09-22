@@ -168,3 +168,87 @@ def test_shell_has_four_lid_screw_pilots(shell):
     assert len(pilots) == 4
     for got in sorted(tuple(p) for p in pilots):
         assert min(math.dist(got, want) for want in case.LID_SCREWS) < 0.2
+
+
+@pytest.fixture(scope="module")
+def lid():
+    return case.build_lid()
+
+
+def test_lid_is_a_single_watertight_body(lid):
+    mesh = geom.to_trimesh(lid)
+    assert mesh.is_watertight
+    assert mesh.body_count == 1
+
+
+def test_lid_spans_the_skirt_and_the_plate(lid):
+    _, _, low_z, _, _, high_z = lid.bounding_box()
+    assert low_z == pytest.approx(datum.LID_SKIRT_BOTTOM_Z, abs=0.05)
+    assert high_z == pytest.approx(datum.LID_TOP_Z, abs=0.05)
+
+
+def test_lid_skirt_clears_the_shell(shell, lid):
+    assert (shell ^ lid).volume() == pytest.approx(0.0, abs=1.0)
+
+
+def test_new_stick_bores_swallow_the_old_ones(lid):
+    """Both old bores must fall inside the new ones, or a stick will bind."""
+    for old_x, old_y in datum.STICK_OLD:
+        old_bore = geom.cyl(datum.STICK_OLD_D, 6.0, old_x, old_y,
+                            datum.LID_PLATE_BOTTOM_Z - 1.0)
+        assert (old_bore ^ lid).volume() == pytest.approx(0.0, abs=1.0)
+
+
+def test_stick_bores_share_one_y_and_keep_the_measured_x(lid):
+    assert case.STICK_NEW[0][1] == case.STICK_NEW[1][1]
+    assert case.STICK_NEW[0][0] == pytest.approx(datum.STICK_OLD[0][0], abs=0.01)
+    assert case.STICK_NEW[1][0] == pytest.approx(datum.STICK_OLD[1][0], abs=0.01)
+
+
+def test_screen_module_can_rise_into_its_nest(lid):
+    """A 38 x 12 x 1.6 board ending at the seat plane must not be obstructed."""
+    module = geom.box(datum.SCREEN_CENTER[0] - 19.0, datum.SCREEN_CENTER[0] + 19.0,
+                      datum.SCREEN_CENTER[1] - 6.0, datum.SCREEN_CENTER[1] + 6.0,
+                      datum.SCREEN_SEAT_Z - datum.BOARD_T, datum.SCREEN_SEAT_Z)
+    assert (module ^ lid).volume() == pytest.approx(0.0, abs=1.0)
+
+
+def test_screen_window_is_smaller_than_the_module(lid):
+    """The lip is what stops the module passing up through the window.
+
+    Sampled below the panel recess; the top 1 mm of the plate is opened out
+    to 46 x 20 and would read as the window otherwise.
+    """
+    assert case.SCREEN_WINDOW[0] < 38.0
+    assert case.SCREEN_WINDOW[1] < 12.0
+    mesh = geom.to_trimesh(lid)
+    z = datum.LID_TOP_Z - case.SCREEN_PANEL_DEPTH - 0.5
+    windows = [high - low for low, high in datum.section_boxes(mesh, z)
+               if abs((high - low)[0] - case.SCREEN_WINDOW[0]) < 0.4]
+    assert len(windows) == 1
+    assert windows[0][1] == pytest.approx(case.SCREEN_WINDOW[1], abs=0.05)
+
+
+def test_screen_nest_is_a_step_between_the_collar_and_the_window(lid):
+    """Module rises into the nest, stops on the shoulder at the seat plane."""
+    mesh = geom.to_trimesh(lid)
+    below = {tuple((high - low).round(2))
+             for low, high in datum.section_boxes(mesh, datum.SCREEN_SEAT_Z - 0.5)}
+    above = {tuple((high - low).round(2))
+             for low, high in datum.section_boxes(mesh, datum.SCREEN_SEAT_Z + 1.0)}
+    assert case.SCREEN_NEST in below
+    assert case.COLLAR_OUTER in below
+    assert case.SCREEN_WINDOW in above
+
+
+def test_lid_top_carries_the_screen_panel_recess(lid):
+    mesh = geom.to_trimesh(lid)
+    sizes = {tuple((high - low).round(2))
+             for low, high in datum.section_boxes(mesh, datum.LID_TOP_Z - 0.5)}
+    assert case.SCREEN_PANEL in sizes
+
+
+def test_lid_keeps_the_antenna_channel_open(lid):
+    old = datum.to_manifold(datum.load_old(datum.OLD_DIR / "kumanda_alt.stl"))
+    opening = geom.box(*datum.CHANNEL_REGION) - old
+    assert (opening ^ lid).volume() == pytest.approx(0.0, abs=1.0)

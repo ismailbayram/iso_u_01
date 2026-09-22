@@ -51,6 +51,27 @@ SHELL_TEXT = "İstikbal Göklerdedir"
 SHELL_TEXT_SIZE = 10.0
 SHELL_TEXT_POS = (68.0, 66.0)
 
+# --- lid ------------------------------------------------------------------
+STICK_NEW = ((datum.STICK_OLD[0][0], 51.00), (datum.STICK_OLD[1][0], 51.00))
+STICK_BORE_D = 33.0
+DISH_D = 46.0
+DISH_DEPTH = 1.2
+
+COLLAR_OUTER = (44.2, 18.2)
+SCREEN_NEST = (39.2, 13.2)
+SCREEN_NEST_TOP_Z = datum.SCREEN_SEAT_Z
+SCREEN_WINDOW = (36.5, 10.5)
+SCREEN_PANEL = (46.0, 20.0)
+SCREEN_PANEL_DEPTH = 1.0
+
+LID_SCREW_CLEAR_D = 3.4
+LID_SCREW_HEAD_D = 6.0
+LID_SCREW_HEAD_DEPTH = 0.8  # the plate is only 2.0 mm thick
+
+LID_TEXT = "ISO U1"
+LID_TEXT_SIZE = 10.0
+LID_TEXT_POS = (68.0, 20.0)
+
 
 def shell_outer_surface():
     """The shell's outer skin: full size up to the skirt, rebated above it."""
@@ -104,3 +125,42 @@ def build_shell():
                              datum.SHELL_BOTTOM_Z - 0.01,
                              datum.SHELL_BOTTOM_Z + TEXT_DEPTH)
     return shell
+
+
+def _centred_box(centre, size, z0, z1):
+    half_x, half_y = size[0] / 2, size[1] / 2
+    return box(centre[0] - half_x, centre[0] + half_x,
+               centre[1] - half_y, centre[1] + half_y, z0, z1)
+
+
+def build_lid():
+    band = box(-40.0, 180.0, -40.0, 180.0, datum.LID_SKIRT_BOTTOM_Z, datum.LID_TOP_Z)
+    hollow = box(-40.0, 180.0, -40.0, 180.0,
+                 datum.LID_SKIRT_BOTTOM_Z - 1.0, datum.LID_PLATE_BOTTOM_Z)
+    lid = (geom.outer_skin() ^ band) - (geom.outer_skin(SKIRT_T) ^ hollow)
+
+    # Overlaps the plate by 0.5 mm; a coplanar union would be degenerate.
+    collar = _centred_box(datum.SCREEN_CENTER, COLLAR_OUTER,
+                          datum.WALL_TOP_Z, datum.LID_PLATE_BOTTOM_Z + 0.5)
+    lid += collar
+    lid -= _centred_box(datum.SCREEN_CENTER, SCREEN_NEST,
+                        datum.WALL_TOP_Z - 1.0, SCREEN_NEST_TOP_Z)
+    lid -= _centred_box(datum.SCREEN_CENTER, SCREEN_WINDOW,
+                        SCREEN_NEST_TOP_Z, datum.LID_TOP_Z + 1.0)
+    lid -= _centred_box(datum.SCREEN_CENTER, SCREEN_PANEL,
+                        datum.LID_TOP_Z - SCREEN_PANEL_DEPTH, datum.LID_TOP_Z + 1.0)
+
+    for x, y in STICK_NEW:
+        lid -= cyl(STICK_BORE_D, 8.0, x, y, datum.LID_PLATE_BOTTOM_Z - 2.0)
+        lid -= geom.spherical_dish(x, y, datum.LID_TOP_Z, DISH_D, DISH_DEPTH)
+
+    for x, y in LID_SCREWS:
+        lid -= cyl(LID_SCREW_CLEAR_D, 6.0, x, y, datum.LID_PLATE_BOTTOM_Z - 1.0)
+        lid -= cyl(LID_SCREW_HEAD_D, LID_SCREW_HEAD_DEPTH + 1.0, x, y,
+                   datum.LID_TOP_Z - LID_SCREW_HEAD_DEPTH)
+
+    lid -= antenna_channel()
+    lid -= box(*datum.CABLE_SLOT)
+    lid -= geom.text_solid(LID_TEXT, LID_TEXT_SIZE, LID_TEXT_POS[0], LID_TEXT_POS[1],
+                           datum.LID_TOP_Z - TEXT_DEPTH, datum.LID_TOP_Z + 0.01)
+    return lid
