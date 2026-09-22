@@ -83,44 +83,46 @@ kutularından okunmuştur:
 | Kapak vidası (sol) | (4.22, 67.44) | Ø2.5 |
 | Kapak vidası (sağ) | (130.20, 67.44) | Ø2.5 |
 
-### 3.4 Üst kenardaki anten / USB kanalı
+### 3.4 Anten deliği
 
-Üst kenarın ortası oyuk. Gövde duvarı x ≈ 46 … 89 arasında **y = 129.0**'a kadar geri
-çekilmiş ve kanal tüm yükseklik boyunca dışarı açık; iki yanında x ≈ 36 → 46 ve x ≈ 89 →
-104 arasında pah var. SMA konnektörünün anteni ve ESP32'nin micro-USB kablosu buradan
-çıkıyor. Kapakta ek olarak x = 63.0 … 74.6 arasında **y = 120.3**'e inen, kabloyu yukarı
-bükmeye yarayan daha derin bir yuva var.
+Eski gövdenin üst duvarında, kart düzleminin altında, **Y ekseni boyunca yatay tek bir
+delik** var:
 
-Kullanıcı bu bölgenin oturduğunu söylüyor, dolayısıyla **yorumlanmıyor, boolean ile
-kopyalanıyor**:
+| Özellik | Değer |
+|---|---|
+| Merkez | x = 32.993, z = −12.510 |
+| Çap | Ø14.007 |
+| Delik boyu | y = 135.045 … 136.705 (yalnız duvar) |
+
+SMA konnektörünün anteni buradan çıkıyor. Ölçü, deliğin silindirik duvarını oluşturan
+yüzlerden okundu: yuvarlak bir delik her yöne süpüren, eksene hizalı olmayan tek yüz
+kümesidir.
+
+Yeni gövde bu deliği aynı eksende, aynı merkezde açar; **çap 13.7** (kullanıcı isteği).
+Eski parçanın 14.007 olduğu `ANTENNA_D_OLD` sabitinde durur, sıkı gelirse tek sayı
+değiştirilir.
+
+Üst kenarın ortasındaki geniş oyuk **taşınmıyor**. İlk uygulamada bu bölge eski gövdenin
+boolean negatifi olarak kopyalanmıştı; eski kutunun iç boşluğunu da beraberinde getirip
+yeni tabana hiçbir işe yaramayan cepler açıyordu.
+
+### 3.5 Micro-USB kablo penceresi
+
+Anten kanalı kalkınca kablonun çıkışı da kalkıyor, oysa kumanda USB'den besleniyor. Yerine
+üst duvarda konnektörün kendi ölçüsünde dikdörtgen pencere açılır:
 
 ```
-KANAL_BOLGESI = kutu(x = 28 … 108, y = 126.0 … 136.07, z = −21 … 24)
-kanal_negatifi = KANAL_BOLGESI − eski_govde_kati
+USB_PENCERESI = kutu(x = 62.69 … 74.29, y = 130 … 145, z = −2 … 21)
 ```
 
-`eski_govde_kati`, `kumanda_alt.stl`'in D çerçevesine ötelenmiş (−135.15, −14.11, 0) hali.
-Bu negatif hem yeni gövdeden hem yeni kapaktan çıkarılır; eski parçanın o bölgede açık
-bıraktığı her hacim yeni parçada da açık kalır.
+X aralığı eski kapağın kablo yuvasından geliyor. Pencere hem gövdeden hem kapak eteğinden
+çıkarılır; üstünü kapak plakası kapatır, kablo yatay çıkar.
 
-Yeni gövdenin dış kenarı y = 138.63'te, eskisi ise y = 136.07'deydi. Aradaki 2.56 mm'lik
-şeridi de açmak için ikinci bir kesim uygulanır:
-
-```
-kanal_uzantisi = kutu(x = 36.27 … 103.94, y = 136.07 … 145, z = −21 … 24)
-```
-
-Kapağa ayrıca kablo yuvası eklenir:
-
-```
-kablo_yuvasi = kutu(x = 62.69 … 74.29, y = 120.37 … 145, z = 20 … 24)
-```
-
-### 3.5 Eski ekran desteği (kaldırılacak)
+### 3.6 Eski ekran desteği (kaldırılacak)
 
 Gövdede x = 122.8…133.5, y = 107.6…119.8, z = 7.4…14.4 ölçülerinde bir blok var. Ekranın
 yalnızca sağ ucunu destekliyor; yamukluğun sebebi bu. Yeni tasarımda kaldırılıyor, yerine
-Bölüm 5'teki tabla geçiyor.
+Bölüm 6'daki tabla geçiyor.
 
 ## 4. Yeni gövde
 
@@ -171,7 +173,11 @@ birleştiren doğruya paraleldir. Tam yükseklik üzerinden hesaplanırsa duvar 
   33'e çıkarılınca eski deliklerin ikisi de yenisinin içinde kalıyor ve göze simetrik
   geliyor. X değerleri ölçülen haliyle korunuyor.
 - Her joystick deliğinin çevresinde **Ø46, 1.2 mm derin küresel çukur** (başparmak yuvası).
-- Anten / USB kanalı: 3.4'teki boolean kuralıyla, kablo yuvası dahil.
+  Çukur gerçek bir küreden kesilir, disk yığınının dışbükey kabuğundan değil: kabuk
+  sürümü doğru ölçüyor ama zaten delinmiş bir plakadan çıkarılınca deliğin üstünde
+  başıboş bir yüz bırakıyor.
+- Anten deliği 3.4'te, USB penceresi 3.5'te. Kapak yalnız USB penceresini taşır; anten
+  deliği gövde duvarındadır.
 - Yazılar **0.6 mm gömme**: "ISO U1" kapağın alt bölgesine (merkez x = 68, y ≈ 20),
   "İstikbal Göklerdedir" gövdenin alt dış yüzüne. Kabartma iptal — mevcut baskıda tüylenmiş.
 
@@ -326,9 +332,13 @@ fonksiyon gövdesine gömülmez.
 2. Joystick deliklerinin X merkezleri — sapma > 0.30 mm ise hata. (Y kasıtlı olarak
    değiştiği için kontrol edilmez.)
 3. Ekran deliğinin ve omzunun merkezi — sapma > 0.30 mm ise hata.
-4. Eski gövdenin 3.4'teki kanal bölgesinde açık bıraktığı hacim, yeni gövde ve yeni kapakta
-   da tamamen açık mı — kesişim hacmi > 1 mm³ ise hata.
-5. Yeni kapağın joystick delikleri, eski kapağın deliklerini tamamen kapsıyor mu.
+4. Anten deliğinin merkezi ve çapı — sapma > 0.05 mm ise hata. Ayrıca delik ekseninde
+   Ø13.7 bir çubuk gövdeyi delip geçiyor mu.
+5. USB penceresi hem gövdede hem kapakta açık mı.
+6. Yeni kapağın joystick delikleri, eski kapağın deliklerini tamamen kapsıyor mu.
+7. **Her joystick deliğinden aşağı atılan ışın hiçbir yüze çarpmıyor mu.** Hacim testleri
+   bunu göremez: deliğin üstünü örten sıfır kalınlıkta bir yüz hiçbir hacmi doldurmaz ama
+   baskıda delik kapalı çıkar. Uygulamada bir tane çıktı.
 
 Ayrıca geometri kontrolü: her parça su geçirmez (`is_watertight`) ve tek gövde
 (`body_count == 1`) olmalı.

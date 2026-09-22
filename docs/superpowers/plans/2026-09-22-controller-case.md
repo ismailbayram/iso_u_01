@@ -1368,7 +1368,24 @@ Planı yazarken öngörülemeyen, testlerin veya önizlemenin yakaladığı beş
    yüzeyleri aynı tonda bırakıp kabartmayı gizliyordu; eksen dışı bir ışığa çevrildi.
    (Task 7)
 
-Spec bu beş maddeye göre güncellendi; plan ile spec aynı geometriyi anlatıyor.
+Teslimden sonra kullanıcının STL'lerde bulduğu ve düzeltilen iki hata:
+
+6. **Sağ joystick deliği kapalıydı.** Kapağın üst yüzünde, deliğin tam üstünde 1010 mm²'lik
+   başıboş bir yüz kalmıştı. Kaynağı `spherical_dish`: disk yığınının dışbükey kabuğu
+   doğru ölçen bir katı üretiyor, ama zaten delinmiş bir plakadan çıkarılınca eş düzlemli
+   bir yüz bırakıyor. Çukur artık gerçek bir küreden kesiliyor. Hiçbir hacim testi bunu
+   göremediği için her delikten aşağı ışın atan bir test eklendi; aynı kontrol `--check`
+   içinde de var.
+7. **Kasanın altında gereksiz cepler vardı.** Anten boşluğu, eski gövdenin tamamının
+   boolean negatifi olarak kopyalanıyordu ve eski kutunun iç boşluğunu da sürüklüyordu.
+   Eski gövdede aslında tek bir düz delik var: üst duvarda, Ø14.007, merkez
+   x = 32.993 / z = −12.510. Yeni gövde onu açıyor. Micro-USB kablosu için konnektör
+   ölçüsünde ayrı bir dikdörtgen pencere kaldı.
+
+Ayrıca her iki üretici de artık negatifleri tek birleşimde toplayıp bir kez çıkarıyor;
+uzun fark zinciri manifold3d'in toplu değerlendirmesinde bu sınıf hataları besliyor.
+
+Spec bu yedi maddeye göre güncellendi; plan ile spec aynı geometriyi anlatıyor.
 
 Gözle bakılacak tek şey estetik: `mechanical/controller/controller_case_preview.png`.
 Kabza kavisi veya başparmak çukuru beğenilmezse `GRIP_CHAIN_LEFT` ve `DISH_D` /
