@@ -80,6 +80,12 @@ unsigned long lastStatusDisplayTime = 0;
 unsigned long lastTelemetryRxTime = 0;
 unsigned long lastLinkLostBeepTime = 0;
 
+// Sagalamasi tutan ama kabul edilmeyen cerceveler icin teshis. Tek tarafli
+// firmware guncellemesi ya da protokol uyusmazligi aksi halde sessizce
+// "telemetri yok" gibi gorunur.
+unsigned long lastRejectLogTime = 0;
+const unsigned long REJECT_LOG_INTERVAL_MS = 500;
+
 char usbLineBuffer[32];
 uint8_t usbLineLength = 0;
 uint8_t pendingCommand = 0;
@@ -208,6 +214,17 @@ bool parseIncomingLoRaByte(uint8_t b)
       Serial.println(telemetryRxCount);
 
       return true;
+    }
+    if (expected == b && millis() - lastRejectLogTime >= REJECT_LOG_INTERVAL_MS)
+    {
+      // Cerceve saglam geldi ama tip veya boyut beklenenden farkli.
+      lastRejectLogTime = millis();
+      Serial.print("[RX] kabul edilmedi: tip=");
+      Serial.print(rxPacketType);
+      Serial.print(" len=");
+      Serial.print(rxPayloadLength);
+      Serial.print(" beklenen telemetri len=");
+      Serial.println(sizeof(TelemetryPacket));
     }
     break;
   }

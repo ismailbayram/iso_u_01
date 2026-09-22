@@ -96,12 +96,25 @@ const unsigned long RX_TIMEOUT_MS = 300;
 // Link uzun sure giderse disarm et. 300 ms'lik failsafe gazi zaten minimuma
 // cekiyor; bu esik ancak baglanti gercekten koptuysa devreye girer.
 const unsigned long DISARM_ON_LINK_LOSS_MS = 5000;
+
+// Boot'ta PC13'te basilan kurulum kodlari.
+const uint8_t LORA_STATUS_BEGIN_FAILED = 1;
+const uint8_t LORA_STATUS_CONFIG_READ_FAILED = 2;
+const uint8_t LORA_STATUS_CONFIG_WRITTEN = 3;
+const uint8_t LORA_STATUS_CONFIG_OK = 4;
+
+const unsigned long TELEMETRY_REQ_TIMEOUT_MS = 3000;
 arming::GestureDetector armDetector;
 
 // Kalibrasyon kaydi flash sektor 7'de (0x08060000, 128 KB). Firmware 41 KB
 // ve sektor 0-2'de duruyor; sektor 7 firmware buyuse bile cakismaz.
 #define CALIBRATION_FLASH_ADDRESS 0x08060000UL
 #define CALIBRATION_FLASH_SECTOR FLASH_SECTOR_7
+// Sektor 7 ancak 512 KB flash'li yongada var. Ucuz BlackPill'lerin bir kismi
+// F411CC (256 KB) ya da klon yonga tasiyor; o yongalarda bu adresi OKUMAK
+// bile bus fault uretir ve setup burada olur, LoRa hic kurulmaz.
+#define CALIBRATION_FLASH_MIN_KB 512
+bool calibrationFlashOk = true;
 
 int16_t accelOffsetX = 0;
 int16_t accelOffsetY = 0;
@@ -165,8 +178,22 @@ uint8_t gpsSats = 0;
 
 void sendFrame(uint8_t packetType, const void *payload, uint8_t payloadLength);
 
+// Yonganin gercek flash boyutu (KB). Kart tanimina degil, silikona sorar.
+static uint32_t flashSizeKb()
+{
+    return (uint32_t)(*(volatile uint16_t *)FLASHSIZE_BASE);
+}
+
 void loadCalibrationFromFlash()
 {
+    if (flashSizeKb() < CALIBRATION_FLASH_MIN_KB)
+    {
+        // Kayit alani bu yongada yok. Okumaya kalkmak setup'i oldururdu.
+        calibrationFlashOk = false;
+        calibrationLoaded = false;
+        return;
+    }
+
     calibration::Record record;
     memcpy(&record, (const void *)CALIBRATION_FLASH_ADDRESS, sizeof(record));
 
@@ -188,6 +215,11 @@ void loadCalibrationFromFlash()
 // durdugu icin kod calismaz. Cagiran taraf once gazi minimuma cekmeli.
 bool saveCalibrationToFlash()
 {
+    if (!calibrationFlashOk)
+    {
+        return false;
+    }
+
     calibration::Record record{};
     record.magic = calibration::MAGIC;
     record.version = calibration::VERSION;
@@ -758,10 +790,80 @@ void sendFrame(uint8_t packetType, const void *payload, uint8_t payloadLength)
     Serial1.write(radio::computeFrameChecksum(packetType, payloadLength, payloadBytes));
 }
 
+// BlackPill'in kart ustu LED'i PC13'te ve aktif dusuk.
+void ledWrite(bool on)
+{
+    digitalWrite(PIN_LED, on ? LOW : HIGH);
+}
+
+// Setup'in her asamasindan sonra bir isaret. Takildigi yerde sayim durur,
+// boylece hangi adimda oldugu disaridan gorulur. Her 5. isaret uzun yanar
+// ki sayarken kaybolmayalim: uzun = 5, 10, ...
+uint8_t bootStage = 0;
+
+void bootMark()
+{
+    bootStage++;
+    const bool longPulse = (bootStage % 5) == 0;
+    ledWrite(true);
+    delay(longPulse ? 500 : 120);
+    ledWrite(false);
+    delay(380);
+}
+
+// Boot'ta durum kodunu yanip sonerek bildirir. Sadece setup'ta cagrilir,
+// bloklamasi sorun degil.
+void blinkStatusCode(uint8_t count)
+{
+    for (uint8_t i = 0; i < count; i++)
+    {
+        ledWrite(true);
+        delay(200);
+        ledWrite(false);
+        delay(200);
+    }
+    delay(700);
+}
+
+// Calisirken link durumunu gosterir:
+//   1 Hz yavas yanip sonme -> kontrol paketi gelmiyor (failsafe)
+//   sabit yanik            -> kontrol geliyor, telemetri istegi gelmiyor
+//   saniyede cift blink    -> ikisi de geliyor
+void updateStatusLed()
+{
+    const unsigned long now = millis();
+    const bool controlAlive = (now - lastPacketTime) <= RX_TIMEOUT_MS;
+    const bool telemetryAlive =
+        lastTelemetryTime != 0 && (now - lastTelemetryTime) <= TELEMETRY_REQ_TIMEOUT_MS;
+
+    if (!controlAlive)
+    {
+        ledWrite((now / 500) % 2 == 0);
+    }
+    else if (!telemetryAlive)
+    {
+        ledWrite(true);
+    }
+    else
+    {
+        const unsigned long phase = now % 1000;
+        ledWrite(phase < 100 || (phase >= 200 && phase < 300));
+    }
+}
+
+// PC13 LED'inde boot'ta kac kez yanip sonecegi. Ucakta baska teshis
+// kanali yok: seri cikis PA2'de ve okumak icin USB-TTL gerekiyor.
+uint8_t loraSetupStatus = LORA_STATUS_BEGIN_FAILED;
+
 void setupLoRaWithLibrary()
 {
+    // Hangi yoldan cikarsak cikalim modulu normal moda birakiyoruz.
+    // getConfiguration() modulu program moduna aliyor; yarida donulurse
+    // modul orada kalir ve hic RF uretmez.
     if (!e22.begin())
     {
+        loraSetupStatus = LORA_STATUS_BEGIN_FAILED;
+        e22.setMode(MODE_0_NORMAL);
         return;
     }
 
@@ -769,6 +871,8 @@ void setupLoRaWithLibrary()
     if (c.status.code != E22_SUCCESS)
     {
         c.close();
+        loraSetupStatus = LORA_STATUS_CONFIG_READ_FAILED;
+        e22.setMode(MODE_0_NORMAL);
         return;
     }
 
@@ -798,6 +902,11 @@ void setupLoRaWithLibrary()
     if (changed)
     {
         e22.setConfiguration(cfg, WRITE_CFG_PWR_DWN_SAVE);
+        loraSetupStatus = LORA_STATUS_CONFIG_WRITTEN;
+    }
+    else
+    {
+        loraSetupStatus = LORA_STATUS_CONFIG_OK;
     }
 
     e22.setMode(MODE_0_NORMAL);
@@ -809,9 +918,11 @@ void setup()
     delay(100);
 
     pinMode(PIN_LED, OUTPUT);
+    bootMark();  // 1 setup'a girildi
     pinMode(PIN_ESC, OUTPUT_OPEN_DRAIN);
     pinMode(PIN_VBAT_SENSE, INPUT_ANALOG);
     analogReadResolution(12);
+    bootMark();  // 2 pin ayarlari
     pinMode(LORA_M0, OUTPUT);
     pinMode(LORA_M1, OUTPUT);
     pinMode(LORA_AUX, INPUT);
@@ -833,6 +944,7 @@ void setup()
     servoAIL.write(SERVO_CENTER_DEG);
     servoELE.write(SERVO_CENTER_DEG);
     servoRUD.write(SERVO_CENTER_DEG);
+    bootMark();  // 3 ESC ve servolar
 
     ds18Batt.begin();
     ds18Esc.begin();
@@ -843,13 +955,18 @@ void setup()
     ds18Batt.requestTemperatures();
     ds18Esc.requestTemperatures();
     lastTempRequestMs = millis();
+    bootMark();  // 4 DS18B20
 
     Wire.setSCL(PB6);
     Wire.setSDA(PB7);
     Wire.begin();
+    bootMark();  // 5 I2C veriyolu (UZUN)
     initGy85();
+    bootMark();  // 6 GY-85
     initBmp280();
+    bootMark();  // 7 BMP280
     loadCalibrationFromFlash();
+    bootMark();  // 8 kalibrasyon flash
     Serial.print("[SETUP] Kalibrasyon: ");
     Serial.println(calibrationLoaded ? "yuklendi" : "yok");
     Serial.print("[SETUP] BMP280: ");
@@ -863,6 +980,7 @@ void setup()
 
     Serial1.setTx(PA9);
     Serial1.setRx(PA10);
+    bootMark();  // 9 Serial1 pinleri
 
 #if USE_GPS
     Serial2.setTx(PIN_GPS_TX);
@@ -871,6 +989,17 @@ void setup()
 #endif
 
     setupLoRaWithLibrary();
+    bootMark();  // 10 LoRa kurulumu (UZUN)
+    delay(1200);
+    // LoRa kurulum sonucu PC13'te: 1 begin hatasi, 2 config okunamadi,
+    // 3 ayar yazildi, 4 ayar zaten uygun.
+    blinkStatusCode(loraSetupStatus);
+    if (!calibrationFlashOk)
+    {
+        // 5 blink: yonga 512 KB'tan kucuk, kalibrasyon kaliciligi kapali.
+        delay(500);
+        blinkStatusCode(5);
+    }
 
     armDetector.reset(millis());
     lastPacketTime = millis();
@@ -990,4 +1119,6 @@ void loop()
     {
         armDetector.disarm(millis());
     }
+
+    updateStatusLed();
 }
