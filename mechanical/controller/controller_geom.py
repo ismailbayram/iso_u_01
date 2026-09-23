@@ -230,26 +230,6 @@ def cavity_solid(z0, z1):
     return prism ^ outer_skin(MIN_WALL)
 
 
-DISH_SPHERE_SEGMENTS = 256
-
-
-def spherical_dish(x, y, top_z, diameter, depth):
-    """A shallow spherical cap to subtract from a face at `top_z`.
-
-    Cut from a real sphere rather than hulled from a stack of discs. The
-    hulled version produced a solid that looked right and measured right,
-    but subtracting it from a plate that already had a hole through it left
-    a stray face roofing the hole over — invisible to any volume check,
-    fatal on the printer. The sphere is large and coarsely faceted, but
-    over a cap this shallow the chord error is under 0.02 mm.
-    """
-    radius = ((diameter / 2) ** 2 + depth ** 2) / (2 * depth)
-    ball = mf.Manifold.sphere(radius, DISH_SPHERE_SEGMENTS).translate(
-        [x, y, top_z - depth + radius])
-    cap = ball ^ cyl(diameter, 4 * radius, x, y, top_z - depth)
-    return cap + cyl(diameter, 5.0, x, y, top_z)
-
-
 def text_solid(text, size, x, y, z0, z1, align="center", mirrored=False):
     """Extruded glyph outlines, centred on (x, y) when align is "center".
 

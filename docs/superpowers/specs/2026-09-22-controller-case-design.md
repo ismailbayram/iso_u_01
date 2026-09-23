@@ -296,6 +296,29 @@ Kapak tarafı:
   okunmaz.
 - Hepsi 3.3'teki (107.44, 113.77) merkezine hizalı.
 
+### 5.1 Ekran tapası — `screen_blank`
+
+Ekran kullanılmayan bir kumanda için, kapaktaki boşluğu kapatan ayrı parça. **Kapak zaten
+basılmış durumda**, o yüzden buradaki her ölçü kapağınkinden türetilir; hiçbiri kapağı
+etkilemez.
+
+| Parça | Ölçü | Nereye oturur |
+|---|---|---|
+| Başlık | 45.6 × 19.6, R1.0 köşe, 1.0 kalın | 46 × 20 gömme panele, üst yüzle tam hizada |
+| Gövde | 36.2 × 10.2, 5.0 boy | 36.5 × 10.5 pencereye, z = 17 … 22 |
+| Rib | 4 adet, 0.3 mm taşkın, 1.2 mm geniş | gövdenin uzun yüzlerinde |
+
+**Üstten takılır.** Başlık pencereden geniş olduğu için içeri düşemez; dışarı düşmesini de
+riblerin sıkması engeller. Alttan takılsaydı başlık pencereden geçemez, gömme panel boş
+kalırdı.
+
+Riblerin işi sürtünme: düz geçme bir gövde kumanda ters çevrilince yuvasından çıkardı.
+Riblerin kapakla çakışması 3.2 mm³; ribler çıkarılınca çakışma 0.00 mm³, yani başka hiçbir
+yerde zorlama yok.
+
+Baskı yönü: **başlık yüzü tablada**. O yüz kapağın üst yüzüyle aynı hizaya geldiği için
+tablada basılması en temiz sonucu verir, gövde de üstüne doğru büyür, sarkma yok.
+
 ## 6. Kabzalar
 
 - Gövdenin alt iki köşesinden dışa ve aşağı doğru kıvrılan iki lob.
@@ -358,6 +381,7 @@ böylece serbest kule sorunu oluşmaz. Vida başı için Ø4.5 havşa z = −30 
 | `controller_lid` | Üst yüzü tablada | Yok |
 | `controller_grip_left` / `_right` | Düz kök yüzü (z = −20 kesiti) tablada | Yok |
 | `screen_shim_*` | Düz | Yok |
+| `screen_blank` | Başlık yüzü tablada | Yok |
 
 **Kabzalar neden ayrı parça:** kabza gövdeden aşağı doğru uzanıyor. Gövde ağzı yukarı
 basıldığında kabzanın her katmanı havaya sarkar; gövde ters çevrildiğinde ise 136 mm'lik iç
@@ -381,6 +405,7 @@ sığar. Kabzalar siluetin içinde kaldığı için gövde de 148.4 × 140.4 mm 
 - `controller_lid.stl`
 - `controller_grip_left.stl`, `controller_grip_right.stl`
 - `screen_shim_133.stl`, `screen_shim_138.stl`, `screen_shim_143.stl`
+- `screen_blank.stl` — ekransız kurulum için kapak tapası (5.1)
 - `controller_case_preview.png`
 
 Bölüm 3'teki bütün ölçüler dosyanın başında adlandırılmış sabitler olarak durur; hiçbiri

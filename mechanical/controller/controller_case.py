@@ -58,8 +58,13 @@ SHELL_TEXT_POS = (68.0, 66.0)
 # --- lid ------------------------------------------------------------------
 STICK_NEW = ((datum.STICK_OLD[0][0], 51.00), (datum.STICK_OLD[1][0], 51.00))
 STICK_BORE_D = 33.0
-DISH_D = 46.0
-DISH_DEPTH = 1.2
+# A 45 degree break around each stick bore, not a thumb dish. The dish was
+# 46 mm across and 1.2 mm deep, which put its edge 6 degrees off
+# horizontal. The lid prints top face down, so that became a near-flat
+# 46 mm overhang growing inward over nothing, and support does not rescue
+# a surface at that angle -- it only leaves its marks on it. Making the
+# dish self-supporting would have meant 23 mm of depth in a 2 mm shell.
+STICK_CHAMFER = 1.0
 
 COLLAR_OUTER = (44.2, 18.2)
 SCREEN_NEST = (39.2, 13.2)
@@ -110,6 +115,21 @@ GRIP_SOLID_ROOT_Z = -30.0
 GRIP_CLEAR_D = 2.4
 GRIP_HEAD_D = 4.5
 GRIP_HEAD_Z = -30.0
+
+# --- screen blank ---------------------------------------------------------
+# Fills the screen opening on a lid that is already printed, so every
+# dimension here is derived from the lid's and none of them may drive it.
+#
+# It goes in from the top. The cap is wider than the window, so it cannot
+# fall through; the ribs on the spigot are what stop it dropping out when
+# the controller is turned over. Insert from below instead and the cap
+# would not fit through the window, leaving the panel recess empty.
+BLANK_FIT = 0.2          # per side, in the panel recess
+BLANK_SPIGOT_FIT = 0.15  # per side, in the window
+BLANK_CAP_R = 1.0        # a printed square recess has rounded corners
+BLANK_RIB_PROUD = 0.3
+BLANK_RIB_W = 1.2
+BLANK_RIB_X = (-9.0, 9.0)
 
 # --- screen shim ----------------------------------------------------------
 SHIM_OUTER = (38.4, 12.4)
@@ -201,6 +221,16 @@ def build_shell():
     return shell - cuts
 
 
+def stick_chamfer(x, y):
+    """The 45 degree break around a stick bore; see STICK_CHAMFER."""
+    low = datum.LID_TOP_Z - STICK_CHAMFER
+    cone = mf.Manifold.cylinder(
+        STICK_CHAMFER, STICK_BORE_D / 2, STICK_BORE_D / 2 + STICK_CHAMFER,
+        geom.SEGMENTS).translate([x, y, low])
+    return cone + cyl(STICK_BORE_D + 2 * STICK_CHAMFER, 5.0, x, y,
+                      datum.LID_TOP_Z)
+
+
 def _centred_box(centre, size, z0, z1):
     half_x, half_y = size[0] / 2, size[1] / 2
     return box(centre[0] - half_x, centre[0] + half_x,
@@ -240,8 +270,7 @@ def build_lid():
 
     for x, y in STICK_NEW:
         cuts += cyl(STICK_BORE_D, 8.0, x, y, datum.LID_PLATE_BOTTOM_Z - 2.0)
-        cuts += (geom.spherical_dish(x, y, geom.barrel_z(x), DISH_D, DISH_DEPTH)
-                 - geom.lowered_skin(DISH_DEPTH))
+        cuts += stick_chamfer(x, y)
 
     for x, y in LID_SCREWS:
         cuts += cyl(LID_SCREW_CLEAR_D, 8.0, x, y, datum.LID_PLATE_BOTTOM_Z - 3.0)
@@ -314,6 +343,39 @@ def build_shim(height):
     return shim + lip
 
 
+def build_screen_blank():
+    """A plug for the screen opening, for a controller built without one.
+
+    Printed cap face down: that face ends up flush with the lid's top, and
+    the spigot grows upward off it with nothing overhanging.
+    """
+    cap_w = SCREEN_PANEL[0] - 2 * BLANK_FIT
+    cap_d = SCREEN_PANEL[1] - 2 * BLANK_FIT
+    spigot_w = SCREEN_WINDOW[0] - 2 * BLANK_SPIGOT_FIT
+    spigot_d = SCREEN_WINDOW[1] - 2 * BLANK_SPIGOT_FIT
+    spigot_h = datum.LID_TOP_Z - SCREEN_PANEL_DEPTH - SCREEN_NEST_TOP_Z
+
+    section = mf.CrossSection(
+        [geom.rounded_rect_points(-cap_w / 2, cap_w / 2, -cap_d / 2, cap_d / 2,
+                                  BLANK_CAP_R)],
+        mf.FillRule.Positive)
+    blank = mf.Manifold.extrude(section, SCREEN_PANEL_DEPTH)
+    blank += box(-spigot_w / 2, spigot_w / 2, -spigot_d / 2, spigot_d / 2,
+                 SCREEN_PANEL_DEPTH, SCREEN_PANEL_DEPTH + spigot_h)
+
+    # Crush ribs: they deform on the way in and hold the plug by friction,
+    # which a plain sliding fit would not.
+    for x in BLANK_RIB_X:
+        for sign in (-1.0, 1.0):
+            near = sign * (spigot_d / 2 - 0.01)
+            far = sign * (spigot_d / 2 + BLANK_RIB_PROUD)
+            blank += box(x - BLANK_RIB_W / 2, x + BLANK_RIB_W / 2,
+                         min(near, far), max(near, far),
+                         SCREEN_PANEL_DEPTH + 0.6,
+                         SCREEN_PANEL_DEPTH + spigot_h)
+    return blank
+
+
 def parts():
     """Every printable part, keyed by output file stem."""
     built = {
@@ -321,6 +383,7 @@ def parts():
         "controller_lid": build_lid(),
         "controller_grip_left": build_grip("left"),
         "controller_grip_right": build_grip("right"),
+        "screen_blank": build_screen_blank(),
     }
     for height in SHIM_HEIGHTS:
         built["screen_shim_%03d" % round(height * 10)] = build_shim(height)

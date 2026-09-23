@@ -120,13 +120,6 @@ def test_outer_skin_side_walls_carry_the_draft():
     assert half_width(high_z) - half_width(low_z) == pytest.approx(expected, abs=0.15)
 
 
-def test_spherical_dish_has_the_asked_for_depth_and_diameter():
-    dish = geom.spherical_dish(0.0, 0.0, 0.0, 46.0, 1.2)
-    low_x, low_y, low_z, high_x, high_y, high_z = dish.bounding_box()
-    assert high_x - low_x == pytest.approx(46.0, abs=0.4)
-    assert low_z == pytest.approx(-1.2, abs=0.02)
-
-
 def test_text_solid_is_not_empty_and_lands_where_asked():
     solid = geom.text_solid("ISO U1", 10.0, 68.0, 20.0, 0.0, 0.6)
     low_x, low_y, low_z, high_x, high_y, high_z = solid.bounding_box()
@@ -407,6 +400,31 @@ def test_lid_top_carries_the_screen_panel_recess(lid):
         geom.barrel_z(centre_x + half_x + 4.0), abs=0.08)
 
 
+def test_lid_has_no_shallow_overhang_inside_its_outline(lid):
+    """Nothing inside the part may face up at less than 45 degrees.
+
+    The lid prints top face down, so a surface facing up in model space
+    faces down on the plate. A thumb dish did this: 46 mm across and
+    1.2 mm deep put its edge 6 degrees off horizontal, which prints as a
+    near-flat overhang growing inward over nothing. Support does not save
+    a surface at that angle, it only leaves its marks on it.
+
+    The edge roll is exempt. Every rounded edge laid face down grows
+    outward over air for its first few layers; that is what a fillet is.
+    """
+    mesh = geom.to_trimesh(lid)
+    normal_z = mesh.face_normals[:, 2]
+    shallow = (normal_z > math.cos(math.radians(45.0))) & (normal_z < 0.995)
+
+    outline = np.array(geom.plan_outline())
+    centres = mesh.triangles_center[shallow][:, :2]
+    from scipy.spatial import cKDTree
+    from_edge = cKDTree(outline).query(centres)[0]
+
+    inside = mesh.area_faces[shallow][from_edge >= geom.EDGE_R + 1.0]
+    assert inside.sum() < 1.0, "%.0f mm^2 of shallow overhang inside" % inside.sum()
+
+
 def test_lid_shell_keeps_its_thickness_across_the_barrel(lid):
     """A flat plate would thin to nothing where the barrel falls away."""
     mesh = geom.to_trimesh(lid)
@@ -511,6 +529,49 @@ def test_grip_screw_seats_are_deep_enough_to_take_an_m3x14(side):
     for x, y in case.GRIP_SCREWS[side]:
         probe = geom.cyl(case.GRIP_HEAD_D, 0.5, x, y, case.GRIP_HEAD_Z)
         assert (probe - envelope).volume() == pytest.approx(0.0, abs=0.3)
+
+
+@pytest.fixture(scope="module")
+def seated_blank():
+    """The blank dropped into the lid's screen opening from above."""
+    return (case.build_screen_blank()
+            .mirror([0.0, 0.0, 1.0])
+            .translate([datum.SCREEN_CENTER[0], datum.SCREEN_CENTER[1],
+                        datum.LID_TOP_Z]))
+
+
+def test_screen_blank_is_a_single_watertight_body():
+    mesh = geom.to_trimesh(case.build_screen_blank())
+    assert mesh.is_watertight
+    assert mesh.body_count == 1
+
+
+def test_screen_blank_finishes_flush_with_the_lid(seated_blank):
+    low_z, high_z = seated_blank.bounding_box()[2], seated_blank.bounding_box()[5]
+    assert high_z == pytest.approx(datum.LID_TOP_Z, abs=0.01)
+    assert low_z == pytest.approx(case.SCREEN_NEST_TOP_Z, abs=0.01)
+
+
+def test_screen_blank_touches_the_lid_only_at_its_ribs(lid, seated_blank):
+    """Everything but the ribs slides in; the ribs are the interference."""
+    assert (seated_blank ^ lid).volume() > 0.5, "ribs are not gripping"
+
+    proud = case.BLANK_RIB_PROUD
+    case.BLANK_RIB_PROUD = 0.0
+    try:
+        plain = (case.build_screen_blank()
+                 .mirror([0.0, 0.0, 1.0])
+                 .translate([datum.SCREEN_CENTER[0], datum.SCREEN_CENTER[1],
+                             datum.LID_TOP_Z]))
+    finally:
+        case.BLANK_RIB_PROUD = proud
+    assert (plain ^ lid).volume() == pytest.approx(0.0, abs=0.1)
+
+
+def test_screen_blank_cannot_fall_through_the_window():
+    """The cap is what stops it dropping inside; the ribs stop it falling out."""
+    assert case.SCREEN_PANEL[0] - 2 * case.BLANK_FIT > case.SCREEN_WINDOW[0]
+    assert case.SCREEN_PANEL[1] - 2 * case.BLANK_FIT > case.SCREEN_WINDOW[1]
 
 
 def test_shim_nominal_height_places_the_module_on_the_seat():
