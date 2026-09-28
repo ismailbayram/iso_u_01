@@ -117,6 +117,10 @@ class SerialLink:
         self.baud = baud
         self.last_error: str | None = None
         self.bad_line_count = 0
+        # Port acikken cihaz kaybolursa (kablo, kumanda resetlendi) okuma
+        # thread'i biter ve bu bayrak kalkar. Port nesnesi hala "acik"
+        # gorunur, is_open'a bakarak bu ayirt edilemez.
+        self.failed = False
 
         self._serial: serial.Serial | None = None
         self._thread: threading.Thread | None = None
@@ -135,6 +139,7 @@ class SerialLink:
             self.close()
 
         self.last_error = None
+        self.failed = False
         try:
             self._serial = serial.Serial(self.port, self.baud, timeout=0.2)
         except (serial.SerialException, OSError) as exc:
@@ -186,6 +191,7 @@ class SerialLink:
             return True
         except (serial.SerialException, OSError, AttributeError) as exc:
             self.last_error = str(exc)
+            self.failed = True
             return False
 
     def _read_loop(self) -> None:
@@ -200,6 +206,9 @@ class SerialLink:
                 raw = port.readline()
             except (serial.SerialException, OSError, AttributeError) as exc:
                 self.last_error = str(exc)
+                # Kasitli close() da okumayi keser; o bir kopma degil.
+                if not self._stop.is_set():
+                    self.failed = True
                 return
 
             if not raw:

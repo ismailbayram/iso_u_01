@@ -37,6 +37,13 @@ Portu baştan biliyorsan atlayabilirsin:
 Port açılamazsa program çıkmaz; hatayı durum satırında gösterir ve başka bir
 port seçebilirsin.
 
+Bağlıyken USB koparsa (kablo oynadı, kumanda yeniden başladı) üst şeritte
+**USB KOPTU** yanıp söner ve program aynı portun geri gelmesini bekler; port
+listede görününce kendiliğinden yeniden bağlanır. İrtifa referansı bu
+durumda korunur. Beklemeyi **IPTAL** ile bırakabilirsin. Kopma sırasında
+bir DISARM onay bekliyor ya da gönderilemediyse durum satırı bunu söyler:
+yeniden bağlanınca ARM rozetine bak.
+
 **Kumanda seri monitörü aynı anda açık olmamalı** — port tek kullanıcı kabul
 eder. `pio device monitor` açıksa "Port acilamadi" alırsın.
 

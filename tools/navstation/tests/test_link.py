@@ -1,3 +1,5 @@
+import time
+
 from navstation import link
 
 
@@ -104,3 +106,70 @@ def test_usable_ports_preserves_order_and_handles_empty():
 def test_available_ports_returns_a_list():
     # Makinede port olmayabilir; sozlesme "istisna atmaz, liste doner".
     assert isinstance(link.available_ports(), list)
+
+
+class _DyingPort:
+    """Ilk okumada cihaz kaybolmus gibi davranan sahte seri port."""
+
+    is_open = True
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def readline(self):
+        raise OSError(6, "Device not configured")
+
+    def write(self, data):
+        raise OSError(6, "Device not configured")
+
+    def close(self):
+        pass
+
+
+def _wait_for(predicate, timeout=1.0):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.01)
+    return False
+
+
+def test_read_error_marks_link_failed(monkeypatch):
+    monkeypatch.setattr(link.serial, "Serial", _DyingPort)
+    serial_link = link.SerialLink("/dev/cu.fake")
+    assert serial_link.open()
+    assert _wait_for(lambda: serial_link.failed)
+    assert "Device not configured" in serial_link.last_error
+    serial_link.close()
+
+
+def test_write_error_marks_link_failed(monkeypatch):
+    monkeypatch.setattr(link.serial, "Serial", _DyingPort)
+    serial_link = link.SerialLink("/dev/cu.fake")
+    serial_link._serial = _DyingPort()
+    assert not serial_link.send_command("DISARM")
+    assert serial_link.failed
+
+
+class _QuietPort(_DyingPort):
+    def readline(self):
+        time.sleep(0.01)
+        return b""
+
+
+def test_deliberate_close_is_not_a_failure(monkeypatch):
+    monkeypatch.setattr(link.serial, "Serial", _QuietPort)
+    serial_link = link.SerialLink("/dev/cu.fake")
+    assert serial_link.open()
+    serial_link.close()
+    assert not serial_link.failed
+
+
+def test_reopen_clears_failed(monkeypatch):
+    monkeypatch.setattr(link.serial, "Serial", _QuietPort)
+    serial_link = link.SerialLink("/dev/cu.fake")
+    serial_link.failed = True
+    assert serial_link.open()
+    assert not serial_link.failed
+    serial_link.close()

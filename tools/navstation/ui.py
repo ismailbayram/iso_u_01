@@ -52,6 +52,11 @@ class NavStationWindow:
         self.shown_telemetry: link.Telemetry | None = None
         self.shown_age_s: float | None = None
         self.shown_stale = True
+        # USB koptuktan sonra geri gelmesi beklenen port. None: beklenmiyor.
+        self.reconnect_port: str | None = None
+        # DISARM yazilamadi ve port koptu: operator yeniden baglaninca
+        # uyarilmali, siradan bir "USB koptu" mesaji bunu ezmemeli.
+        self.disarm_unconfirmed = False
 
         self.root = tk.Tk()
         self.root.title("ISO U1 — Yer Istasyonu")
@@ -207,13 +212,55 @@ class NavStationWindow:
     def _schedule_port_rescan(self) -> None:
         # Bagli degilken liste kendi kendine tazelenir: kumandayi taktiginda
         # YENILE'ye basmayi unutup "niye listede yok" dememek icin.
-        if self.link is None:
-            self._refresh_ports()
-        self.root.after(PORT_RESCAN_MS, self._schedule_port_rescan)
+        try:
+            if self.link is None:
+                self._refresh_ports()
+                if self.reconnect_port in self.port_names:
+                    self._try_reconnect()
+            elif self.link.port not in link.available_ports():
+                # Okuma thread'i kopmayi her zaman hemen gormez; port
+                # listeden dustuyse cihaz gitmistir.
+                self._handle_link_lost()
+        finally:
+            self.root.after(PORT_RESCAN_MS, self._schedule_port_rescan)
+
+    def _handle_link_lost(self) -> None:
+        port = self.link.port
+        error = self.link.last_error or "port listeden dustu"
+        disarm_pending = self.disarm_deadline_ms is not None or self.disarm_unconfirmed
+        self.link.close()
+        self.link = None
+
+        # Irtifa sifiri ayni ucusa ait; yeniden baglaninca korunur.
+        self._reset_session_state(keep_reference=True)
+        self.reconnect_port = port
+        self.connect_button.configure(text="IPTAL", state="normal")
+        self.port_combo.configure(state="disabled")
+        self.refresh_button.configure(state="disabled")
+        if disarm_pending:
+            self.status.configure(
+                text="USB koptu - DISARM DOGRULANAMADI, baglaninca ARM durumuna bak")
+        else:
+            self.status.configure(text=f"USB koptu ({error}) - port bekleniyor...")
+
+    def _try_reconnect(self) -> None:
+        port = self.reconnect_port
+        if self._connect(port, keep_reference=True):
+            self.status.configure(text=f"{port} yeniden baglandi - ARM durumunu kontrol et")
+        else:
+            # Port listede gorunup henuz acilamayabilir; bir sonraki taramada
+            # tekrar denenir.
+            self.status.configure(text=f"{port} geri geldi ama acilamadi, tekrar deneniyor...")
 
     def _on_connect_toggle(self) -> None:
         if self.link is not None:
             self._disconnect()
+            return
+
+        if self.reconnect_port is not None:
+            self.reconnect_port = None
+            self._disconnect()
+            self.status.configure(text="Otomatik baglanti iptal - port sec ve BAGLAN'a bas")
             return
 
         port = self.port_combo.get().strip()
@@ -222,42 +269,47 @@ class NavStationWindow:
             return
         self._connect(port)
 
-    def _connect(self, port: str) -> None:
+    def _connect(self, port: str, keep_reference: bool = False) -> bool:
         candidate = link.SerialLink(port, self.baud)
         if not candidate.open():
             # Hata durum satirinda kalir ve pencere acik kalir; amac zaten
             # baska bir port secebilmek.
             self.status.configure(text=f"Port acilamadi: {candidate.last_error}")
-            return
+            return False
 
         self.link = candidate
-        self._reset_session_state()
+        self.reconnect_port = None
+        self._reset_session_state(keep_reference)
         self.connect_button.configure(text="KES", state="normal")
         self.port_combo.configure(state="disabled")
         self.refresh_button.configure(state="disabled")
         self.status.configure(text=f"{port} baglandi, telemetri bekleniyor...")
+        return True
 
     def _disconnect(self) -> None:
         if self.link is not None:
             self.link.close()
             self.link = None
 
+        self.reconnect_port = None
         self._reset_session_state()
         self.connect_button.configure(text="BAGLAN", state="normal")
         self.port_combo.configure(state="readonly")
         self.refresh_button.configure(state="normal")
         self.status.configure(text="Baglanti kesildi - port sec ve BAGLAN'a bas")
 
-    def _reset_session_state(self) -> None:
+    def _reset_session_state(self, keep_reference: bool = False) -> None:
         # Her baglanti yeni bir oturum: irtifa sifiri yeniden yakalanir,
         # bayatlik sayaclari ve bekleyen onaylar temizlenir.
-        self.reference_pa = None
+        if not keep_reference:
+            self.reference_pa = None
         self.last_rx_count = None
         self.last_packet_wall_time = None
         self.calibration_deadline_ms = None
         self.pending_calibration = None
         self.disarm_deadline_ms = None
         self.disarm_baseline_rx = None
+        self.disarm_unconfirmed = False
         self.shown_telemetry = None
         self.shown_age_s = None
         self.shown_stale = True
@@ -320,6 +372,7 @@ class NavStationWindow:
             self.disarm_deadline_ms = DISARM_TIMEOUT_MS
             self.status.configure(text="DISARM gonderildi, onay bekleniyor...")
         else:
+            self.disarm_unconfirmed = True
             self.status.configure(text=f"DISARM gonderilemedi: {self.link.last_error}")
 
     # -- dongu ------------------------------------------------------------
@@ -346,6 +399,9 @@ class NavStationWindow:
             self.root.after(REFRESH_MS, self._tick)
 
     def _refresh(self) -> None:
+        if self.link is not None and self.link.failed:
+            self._handle_link_lost()
+
         if self.link is None:
             self._draw_horizon(0.0, 0.0)
             self._draw_header()
@@ -361,6 +417,7 @@ class NavStationWindow:
         age_s = (time.monotonic() - self.last_packet_wall_time
                  if self.last_packet_wall_time is not None else None)
         stale = age_s is None or age_s * 1000 > LINK_STALE_MS
+        was_stale = self.shown_stale
 
         self.shown_telemetry = telemetry
         self.shown_age_s = age_s
@@ -371,7 +428,7 @@ class NavStationWindow:
             heading = (attitude.heading_deg(telemetry.heading_decideg)
                        if telemetry.flags & link.FLAG_MAG else None)
             self._draw_horizon(*attitude.pitch_roll_deg(
-                telemetry.ax, telemetry.ay, telemetry.az), heading)
+                *attitude.body_axes(telemetry.ax, telemetry.ay, telemetry.az)), heading)
             self._update_buttons(telemetry, stale)
             self._check_calibration(telemetry)
             self._check_disarm(telemetry)
@@ -384,8 +441,13 @@ class NavStationWindow:
             tile.set_live(not stale)
         self._draw_header()
 
-        if stale:
+        # Metin yalniz gecislerde yazilir. Her karede yazilsaydi "LINK YOK"
+        # link geri geldiginde de ekranda kalirdi, bayatken de komut
+        # mesajlarini (DISARM gonderildi vb.) aninda ezerdi.
+        if stale and not was_stale:
             self.status.configure(text="LINK YOK")
+        elif was_stale and not stale:
+            self.status.configure(text="Link geldi, telemetri aliniyor")
         self.status.configure(fg=DANGER if stale else ACCENT)
 
     def _check_calibration(self, telemetry: link.Telemetry) -> None:
@@ -475,14 +537,16 @@ class NavStationWindow:
             tiles["pressure"].show("--", sub="SENSOR YOK", colour=DIM)
             tiles["altitude"].show("--", sub="SENSOR YOK", colour=DIM)
 
-        pitch, roll = attitude.pitch_roll_deg(t.ax, t.ay, t.az)
+        ax, ay, az = attitude.body_axes(t.ax, t.ay, t.az)
+        gx, gy, gz = attitude.body_axes(t.gx, t.gy, t.gz)
+        pitch, roll = attitude.pitch_roll_deg(ax, ay, az)
         if t.flags & link.FLAG_ACCEL:
             tiles["pitch"].show(f"{pitch:+.1f}", "deg", _nose(pitch), ACCENT, level=pitch)
             tiles["roll"].show(f"{roll:+.1f}", "deg", _bank(roll), ACCENT, level=roll)
             tiles["accel"].show(
-                f"{attitude.accel_to_g(t.ax):+.2f} "
-                f"{attitude.accel_to_g(t.ay):+.2f} "
-                f"{attitude.accel_to_g(t.az):+.2f}", sub="g", colour=ACCENT)
+                f"{attitude.accel_to_g(ax):+.2f} "
+                f"{attitude.accel_to_g(ay):+.2f} "
+                f"{attitude.accel_to_g(az):+.2f}", sub="g", colour=ACCENT)
         else:
             for key in ("pitch", "roll", "accel"):
                 tiles[key].show("--", sub="SENSOR YOK", colour=DIM)
@@ -496,9 +560,9 @@ class NavStationWindow:
 
         if t.flags & link.FLAG_GYRO:
             tiles["gyro"].show(
-                f"{attitude.gyro_to_dps(t.gx):+.0f} "
-                f"{attitude.gyro_to_dps(t.gy):+.0f} "
-                f"{attitude.gyro_to_dps(t.gz):+.0f}", sub="deg/s", colour=ACCENT)
+                f"{attitude.gyro_to_dps(gx):+.0f} "
+                f"{attitude.gyro_to_dps(gy):+.0f} "
+                f"{attitude.gyro_to_dps(gz):+.0f}", sub="deg/s", colour=ACCENT)
         else:
             tiles["gyro"].show("--", sub="SENSOR YOK", colour=DIM)
 
@@ -554,7 +618,9 @@ class NavStationWindow:
 
         t = self.shown_telemetry
         connected = self.link is not None
-        if not connected:
+        if not connected and self.reconnect_port is not None:
+            x = hud.pill(c, x, mid, "USB KOPTU", DANGER, filled=_blink())
+        elif not connected:
             x = hud.pill(c, x, mid, "BAGLI DEGIL", DIM)
         elif self.shown_stale:
             x = hud.pill(c, x, mid, "LINK YOK", DANGER, filled=_blink())
@@ -737,7 +803,7 @@ class NavStationWindow:
                               fill=FG if major else DIM, width=1)
                 if mark % 30 == 0:
                     bearing = mark % 360
-                    text = CARDINALS.get(bearing, f"{bearing // 10:02d}")
+                    text = CARDINALS.get(bearing, f"{bearing:03d}")
                     c.create_text(x, y0 + 14, text=text, font=hud.LABEL_FONT,
                                   fill=WARN if bearing in CARDINALS else FG)
             mark += 5

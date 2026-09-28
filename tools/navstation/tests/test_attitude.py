@@ -28,9 +28,23 @@ def test_roll_right_is_positive():
 
 
 def test_pitch_up_is_positive():
-    pitch, roll = attitude.pitch_roll_deg(-64, 0, 64)
+    # Burun kalkinca X ekseni yukari bakar ve +g okur.
+    pitch, roll = attitude.pitch_roll_deg(64, 0, 64)
     assert pitch == pytest.approx(45.0)
     assert roll == pytest.approx(0.0)
+
+
+def test_face_down_board_reads_level_when_flat(monkeypatch):
+    # Canli veri: duz ucakta yuzustu kart az = -67 okuyor.
+    monkeypatch.setattr(attitude, "BOARD_FACE_DOWN", True)
+    pitch, roll = attitude.pitch_roll_deg(*attitude.body_axes(0, 0, -64))
+    assert pitch == pytest.approx(0.0)
+    assert roll == pytest.approx(0.0)
+
+
+def test_upright_board_axes_pass_through(monkeypatch):
+    monkeypatch.setattr(attitude, "BOARD_FACE_DOWN", False)
+    assert attitude.body_axes(1, 2, 3) == (1, 2, 3)
 
 
 def test_all_zero_accel_does_not_raise():

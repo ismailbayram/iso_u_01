@@ -12,6 +12,11 @@ ACCEL_LSB_PER_G = 64.0
 # ITG3205 FS_SEL=3: +-2000 derece/saniye.
 GYRO_LSB_PER_DPS = 14.375
 
+# GY-85 bu ucakta yuzustu takili (cipler asagi, burun yonu ayni): X ekseni
+# etrafinda 180 derece donuk, Y ve Z isaret degistiriyor. Duz ucakta az
+# -1 g okunuyor ve duzeltilmezse ufuk bas asagi cizilir.
+BOARD_FACE_DOWN = True
+
 # Barometrik irtifa formulu (ISA).
 _ALTITUDE_COEFFICIENT = 44330.0
 _ALTITUDE_EXPONENT = 0.1902949
@@ -25,14 +30,23 @@ def gyro_to_dps(raw: float) -> float:
     return raw / GYRO_LSB_PER_DPS
 
 
+def body_axes(x: int, y: int, z: int) -> tuple[int, int, int]:
+    """Sensor eksenlerini ucak eksenlerine cevirir; ivme ve jiroya ayni uygulanir."""
+    if BOARD_FACE_DOWN:
+        return x, -y, -z
+    return x, y, z
+
+
 def pitch_roll_deg(ax: int, ay: int, az: int) -> tuple[float, float]:
     """Ivmeolcer vektorunden pitch ve roll, derece cinsinden.
 
     Olcek sadelestigi icin LSB katsayisi sonucu etkilemez.
     Uc eksen de sifirsa (sensor yok) 0, 0 doner; istisna atilmaz.
     """
+    # Eksenler X burun, Y sol kanat, Z yukari. Ivmeolcer yukari bakan ekseni
+    # +1 g okur: burun kalkinca ax, saga yatinca ay pozitife gider.
     roll = math.degrees(math.atan2(ay, az))
-    pitch = math.degrees(math.atan2(-ax, math.hypot(ay, az)))
+    pitch = math.degrees(math.atan2(ax, math.hypot(ay, az)))
     return pitch, roll
 
 
