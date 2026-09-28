@@ -214,6 +214,16 @@ def icon_gyro(c, x, y, s, colour, level):
     c.create_oval(x - 3, y - 3, x + 3, y + 3, fill=colour, outline="")
 
 
+def icon_stick(c, x, y, s, colour, level):
+    # Seviye -1..1: cubugun merkezden sapmasi, top o kadar yana kayar.
+    r = s * 0.42
+    c.create_rectangle(x - r, y - r, x + r, y + r, outline=colour, width=2)
+    c.create_line(x - r, y, x + r, y, fill=DIM_DARK, dash=(2, 3))
+    c.create_line(x, y - r, x, y + r, fill=DIM_DARK, dash=(2, 3))
+    dx = (max(-1.0, min(1.0, level)) if level is not None else 0.0) * (r - 6)
+    c.create_oval(x + dx - 5, y - 5, x + dx + 5, y + 5, fill=colour, outline="")
+
+
 def icon_accel(c, x, y, s, colour, level):
     ox, oy = x - s * 0.18, y + s * 0.2
     for dx, dy in ((s * 0.5, 0), (0, -s * 0.52), (-s * 0.26, s * 0.2)):

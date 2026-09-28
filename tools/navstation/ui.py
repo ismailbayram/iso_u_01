@@ -5,7 +5,7 @@ import time
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from . import attitude, hud, link
+from . import attitude, controls, hud, link
 from .hud import (ACCENT, BG, DANGER, DIM, EDGE, EDGE_HI, FG, GROUND_FAR,
                   GROUND_NEAR, OK, PANEL, PLANE, SKY_HIGH, SKY_LOW, WARN)
 
@@ -98,6 +98,9 @@ class NavStationWindow:
         self.right = self._make_column(body, "UCUS")
         self.right.pack(side="left", fill="y", padx=(12, 0))
 
+        self.sticks_column = self._make_column(body, "KUMANDA")
+        self.sticks_column.pack(side="left", fill="y", padx=(12, 0))
+
         self.tiles = {
             "battery": self._add_tile(self.left, "BATARYA", hud.icon_battery),
             "batt_temp": self._add_tile(self.left, "BATARYA SICAKLIK", hud.icon_thermometer),
@@ -112,6 +115,14 @@ class NavStationWindow:
                                    hud.VALUE_FONT_SMALL),
             "accel": self._add_tile(self.right, "IVME  x / y / z", hud.icon_accel,
                                     hud.VALUE_FONT_SMALL),
+        }
+        # Kumandanin gonderdigi kanallar. Telemetriden bagimsiz: ucak kapaliyken
+        # de akar, bu yuzden bayat telemetride soluklasmaz.
+        self.stick_tiles = {
+            "ail": self._add_tile(self.sticks_column, "AILERON  RX", hud.icon_stick),
+            "ele": self._add_tile(self.sticks_column, "ELEVATOR  RY", hud.icon_stick),
+            "rud": self._add_tile(self.sticks_column, "RUDDER  LX", hud.icon_stick),
+            "thr": self._add_tile(self.sticks_column, "GAZ  LY", hud.icon_stick),
         }
 
         self._build_bottom_bar()
@@ -313,7 +324,7 @@ class NavStationWindow:
         self.shown_telemetry = None
         self.shown_age_s = None
         self.shown_stale = True
-        for tile in self.tiles.values():
+        for tile in (*self.tiles.values(), *self.stick_tiles.values()):
             tile.reset()
 
     def shutdown(self) -> None:
@@ -407,6 +418,10 @@ class NavStationWindow:
             self._draw_header()
             self._set_buttons_enabled(False)
             return
+
+        sticks = self.link.latest_sticks()
+        if sticks is not None:
+            self._update_sticks(sticks)
 
         telemetry = self.link.latest_telemetry()
 
@@ -565,6 +580,22 @@ class NavStationWindow:
                 f"{attitude.gyro_to_dps(gz):+.0f}", sub="deg/s", colour=ACCENT)
         else:
             tiles["gyro"].show("--", sub="SENSOR YOK", colour=DIM)
+
+    def _update_sticks(self, s: link.Sticks) -> None:
+        # Buyuk sayi ham deger, yanindaki merkezden sapma: trim olcusu bu
+        # ikisi. Sag ustte STM32'nin servoya yazacagi aci.
+        for key, raw in (("ail", s.rx), ("ele", s.ry), ("rud", s.lx)):
+            offset = controls.center_offset(raw)
+            deg = controls.servo_deg(raw)
+            self.stick_tiles[key].show(
+                f"{raw}", f"{offset:+d}", f"SERVO {deg} deg",
+                ACCENT if deg == controls.SERVO_CENTER_DEG else WARN,
+                fraction=raw / controls.STICK_MAX,
+                level=offset / controls.STICK_CENTER)
+        self.stick_tiles["thr"].show(
+            f"{s.ly}", "", f"ESC {controls.throttle_us(s.ly)} us", ACCENT,
+            fraction=s.ly / controls.STICK_MAX,
+            level=controls.center_offset(s.ly) / controls.STICK_CENTER)
 
     @staticmethod
     def _show_temperature(tile: hud.Tile, centi: int) -> None:

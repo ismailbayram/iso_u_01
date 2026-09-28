@@ -502,6 +502,24 @@ static float filteredRX = 2048;
 static float filteredRY = 2048;
 const float FILTER_COEFFICIENT = 0.35;
 
+// Aileron cubugu bosta 2048'in altinda okuyor; STM32'nin 45'lik olu
+// bolgesini asip servoyu 88 dereceye goturuyordu. Acilista cubugun bosta
+// okudugu deger merkez kabul edilir. Cubuk tutuluyken acilirsa sapma
+// makul degilse duzeltme yapilmaz.
+const int RX_CENTER_MAX_CORRECTION = 300;
+int rxCenterOffset = 0;
+
+void calibrateRxCenter()
+{
+  long sum = 0;
+  for (int i = 0; i < 32; i++)
+  {
+    sum += analogRead(PIN_JOY_R_X);
+  }
+  const int offset = 2048 - (int)(sum / 32);
+  rxCenterOffset = (abs(offset) <= RX_CENTER_MAX_CORRECTION) ? offset : 0;
+}
+
 void normalizeInputs(int *LX, int *LY, int *RX, int *RY)
 {
   filteredLX = (*LX * FILTER_COEFFICIENT) + (filteredLX * (1.0 - FILTER_COEFFICIENT));
@@ -511,7 +529,7 @@ void normalizeInputs(int *LX, int *LY, int *RX, int *RY)
 
   *LX = (int)filteredLX;
   *LY = 4095 - (int)filteredLY; // Invert LY for throttle
-  *RX = (int)filteredRX;
+  *RX = (int)filteredRX + rxCenterOffset;
   *RY = (int)filteredRY;
 
   const int center = 2048;
@@ -553,8 +571,11 @@ void setup()
   filteredLY = analogRead(PIN_JOY_L_Y);
   filteredRX = analogRead(PIN_JOY_R_X);
   filteredRY = analogRead(PIN_JOY_R_Y);
+  calibrateRxCenter();
 
   Serial.begin(115200);
+  Serial.print("[STICK] RX merkez duzeltmesi: ");
+  Serial.println(rxCenterOffset);
   Serial.println("[FW] esp32-telemetry-parser-v2");
   Serial.print("[DBG] TEL_STRUCT_SIZE=");
   Serial.println(sizeof(TelemetryPacket));
