@@ -98,9 +98,17 @@ unsigned long lastTelemetryTime = 0;
 unsigned long lastPacketTime = 0;
 
 const unsigned long RX_TIMEOUT_MS = 300;
-// Link uzun sure giderse disarm et. 300 ms'lik failsafe gazi zaten minimuma
-// cekiyor; bu esik ancak baglanti gercekten koptuysa devreye girer.
-const unsigned long DISARM_ON_LINK_LOSS_MS = 5000;
+// Armed'ken link bu kadar sure sessiz kalirsa donus moduna gecilir. Kumanda
+// her saniye telemetri icin 250 ms susuyor; tek bir kayip paket 300 ms'yi
+// asabildigi icin donus RX_TIMEOUT_MS'e baglanmadi, yoksa her kisa kesintide
+// gaz yarima ziplardi. Arada gecen surede applyFailsafe gazi keser.
+const unsigned long LOITER_AFTER_LINK_LOSS_MS = 1500;
+// Link bu kadar sure gelmezse disarm et: gaz kesilir, servolar notre doner.
+const unsigned long DISARM_ON_LINK_LOSS_MS = 30000;
+const int LOITER_THROTTLE_US = (MIN_THROTTLE + MAX_THROTTLE) / 2;
+// Aileron cubugu saga = RX artar = servo 90'in ustu. Tam yol 45 derece;
+// sabit aileron surekli yatis hizi verdigi icin ucte biri kullaniliyor.
+const int LOITER_AIL_DEG = SERVO_CENTER_DEG + 15;
 
 // Boot'ta PC13'te basilan kurulum kodlari.
 const uint8_t LORA_STATUS_BEGIN_FAILED = 1;
@@ -405,6 +413,20 @@ void applyFailsafe()
     servoELE.write(SERVO_CENTER_DEG);
     servoRUD.write(RUDDER_NEUTRAL_DEG);
     lastServoAIL = SERVO_CENTER_DEG;
+    lastServoELE = SERVO_CENTER_DEG;
+    lastServoRUD = RUDDER_NEUTRAL_DEG;
+}
+
+// Armed'ken link koptuysa ucak dusmesin diye saga yatik, yarim gazla doner.
+// Elevator ve rudder notrde kalir. lastServo* onbellegi applyFailsafe ile
+// ayni sebepten guncelleniyor.
+void applyLinkLossLoiter()
+{
+    myESC.writeMicroseconds(LOITER_THROTTLE_US);
+    servoAIL.write(LOITER_AIL_DEG);
+    servoELE.write(SERVO_CENTER_DEG);
+    servoRUD.write(RUDDER_NEUTRAL_DEG);
+    lastServoAIL = LOITER_AIL_DEG;
     lastServoELE = SERVO_CENTER_DEG;
     lastServoRUD = RUDDER_NEUTRAL_DEG;
 }
@@ -1052,7 +1074,9 @@ void loop()
             lastPacketTime = millis();
             // Jest, STM32'nin kendi filtresinden ONCE, ham paket degerleriyle
             // cozuluyor; cift filtrelemenin gecikmesine takilmasin.
-            armDetector.update(receivedPacket.LY, receivedPacket.RY, millis());
+            // Kumanda elevator yonu icin RY'yi ters gonderiyor; jestte cubuk
+            // fiziksel olarak asagi cekildiginde RY yuksek gelir, geri cevrilir.
+            armDetector.update(receivedPacket.LY, 4095 - receivedPacket.RY, millis());
             applyOutputs(receivedPacket);
         }
         bytesProcessed++;
@@ -1115,14 +1139,20 @@ void loop()
         lastTelemetryTime = millis();
     }
 
-    if (millis() - lastPacketTime > RX_TIMEOUT_MS)
-    {
-        applyFailsafe();
-    }
+    const unsigned long linkSilentMs = millis() - lastPacketTime;
 
-    if (millis() - lastPacketTime > DISARM_ON_LINK_LOSS_MS)
+    if (linkSilentMs > DISARM_ON_LINK_LOSS_MS)
     {
         armDetector.disarm(millis());
+    }
+
+    if (linkSilentMs > LOITER_AFTER_LINK_LOSS_MS && armDetector.isArmed())
+    {
+        applyLinkLossLoiter();
+    }
+    else if (linkSilentMs > RX_TIMEOUT_MS)
+    {
+        applyFailsafe();
     }
 
     updateStatusLed();
