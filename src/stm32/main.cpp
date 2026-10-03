@@ -68,6 +68,11 @@ const int SERVO_CENTER_DEG = 90;
 const int SERVO_TRAVEL_DEG = 45;
 const int SERVO_MIN_DEG = SERVO_CENTER_DEG - SERVO_TRAVEL_DEG;
 const int SERVO_MAX_DEG = SERVO_CENTER_DEG + SERVO_TRAVEL_DEG;
+// Rudder teli, dumen servo 112 derecedeyken ortada olacak sekilde baglandi
+// (kumandanin RUDDER_NEUTRAL = 3050 degerinin karsiligi). Acilis, failsafe
+// ve disarm rudder'i 90'a degil buraya alir; kumandadaki deger degisirse
+// burasi da degismeli.
+const int RUDDER_NEUTRAL_DEG = 112;
 
 // applyOutputs() bu degerleri onbellek olarak kullanip gereksiz servo
 // yazimlarini eliyor. applyFailsafe() servolari fiziksel olarak merkeze
@@ -75,7 +80,7 @@ const int SERVO_MAX_DEG = SERVO_CENTER_DEG + SERVO_TRAVEL_DEG;
 // yerdeyse servo bir daha hic komut almaz.
 int lastServoAIL = SERVO_CENTER_DEG;
 int lastServoELE = SERVO_CENTER_DEG;
-int lastServoRUD = SERVO_CENTER_DEG;
+int lastServoRUD = RUDDER_NEUTRAL_DEG;
 
 // Ust bacak = besleme kablosuna seri eklenen 330k.
 // Alt bacak = kart uzerindeki R7 (47k), PA4 ile GND arasinda.
@@ -290,10 +295,10 @@ bool saveCalibrationToFlash()
     pinMode(PIN_SERVO_RUD, OUTPUT_OPEN_DRAIN);
     servoAIL.write(SERVO_CENTER_DEG);
     servoELE.write(SERVO_CENTER_DEG);
-    servoRUD.write(SERVO_CENTER_DEG);
+    servoRUD.write(RUDDER_NEUTRAL_DEG);
     lastServoAIL = SERVO_CENTER_DEG;
     lastServoELE = SERVO_CENTER_DEG;
-    lastServoRUD = SERVO_CENTER_DEG;
+    lastServoRUD = RUDDER_NEUTRAL_DEG;
     return ok;
 }
 
@@ -398,10 +403,10 @@ void applyFailsafe()
     myESC.writeMicroseconds(MIN_THROTTLE);
     servoAIL.write(SERVO_CENTER_DEG);
     servoELE.write(SERVO_CENTER_DEG);
-    servoRUD.write(SERVO_CENTER_DEG);
+    servoRUD.write(RUDDER_NEUTRAL_DEG);
     lastServoAIL = SERVO_CENTER_DEG;
     lastServoELE = SERVO_CENTER_DEG;
-    lastServoRUD = SERVO_CENTER_DEG;
+    lastServoRUD = RUDDER_NEUTRAL_DEG;
 }
 
 bool parseIncomingByte(uint8_t b)
@@ -943,7 +948,7 @@ void setup()
 
     servoAIL.write(SERVO_CENTER_DEG);
     servoELE.write(SERVO_CENTER_DEG);
-    servoRUD.write(SERVO_CENTER_DEG);
+    servoRUD.write(RUDDER_NEUTRAL_DEG);
     bootMark();  // 3 ESC ve servolar
 
     ds18Batt.begin();

@@ -520,6 +520,14 @@ void calibrateRxCenter()
   rxCenterOffset = (abs(offset) <= RX_CENTER_MAX_CORRECTION) ? offset : 0;
 }
 
+// Rudder teli, servo 3050 degerindeyken dumen ortada olacak sekilde
+// baglanabildi; cubuk bostayken 2048 yerine bu deger gonderilir.
+const int RUDDER_NEUTRAL = 3050;
+// Rudder tam cubukta fazla keskin; cubuk hareketi bu orana daraltilip
+// gonderilir. Notr 3050 oldugu icin ust tarafta 1045 birim yer var; 50 ile
+// aralik 2027-4073 olur, kirpilmaz ve servo notrden +-22 derece doner.
+const int RUDDER_RATE_PERCENT = 50;
+
 void normalizeInputs(int *LX, int *LY, int *RX, int *RY)
 {
   filteredLX = (*LX * FILTER_COEFFICIENT) + (filteredLX * (1.0 - FILTER_COEFFICIENT));
@@ -530,7 +538,7 @@ void normalizeInputs(int *LX, int *LY, int *RX, int *RY)
   *LX = (int)filteredLX;
   *LY = 4095 - (int)filteredLY; // Invert LY for throttle
   *RX = (int)filteredRX + rxCenterOffset;
-  *RY = (int)filteredRY;
+  *RY = 4095 - (int)filteredRY; // Invert RY for elevator
 
   const int center = 2048;
   const int deadband = 18;
@@ -540,6 +548,8 @@ void normalizeInputs(int *LX, int *LY, int *RX, int *RY)
     *RX = center;
   if (abs(*RY - center) < deadband)
     *RY = center;
+
+  *LX = RUDDER_NEUTRAL + ((*LX - center) * RUDDER_RATE_PERCENT) / 100;
 
   *LX = constrain(*LX, 0, 4095);
   *LY = constrain(*LY, 0, 4095);
