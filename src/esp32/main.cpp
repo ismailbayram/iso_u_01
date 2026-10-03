@@ -523,10 +523,11 @@ void calibrateRxCenter()
 // Rudder teli, servo 3050 degerindeyken dumen ortada olacak sekilde
 // baglanabildi; cubuk bostayken 2048 yerine bu deger gonderilir.
 const int RUDDER_NEUTRAL = 3050;
-// Rudder tam cubukta fazla keskin; cubuk hareketi bu orana daraltilip
-// gonderilir. Notr 3050 oldugu icin ust tarafta 1045 birim yer var; 50 ile
-// aralik 2027-4073 olur, kirpilmaz ve servo notrden +-22 derece doner.
-const int RUDDER_RATE_PERCENT = 50;
+// Cubugun iki ucunda gonderilen degerler. Notr 3050 oldugu icin ust tarafta
+// 4095'e kadar az yer var; alt taraf (sol) daha genis tutuluyor, yoksa dumen
+// sola yeterince kirilmiyor. Servo notrden sola 45, saga 22 derece doner.
+const int RUDDER_MIN = 1000;
+const int RUDDER_MAX = 4073;
 
 void normalizeInputs(int *LX, int *LY, int *RX, int *RY)
 {
@@ -549,7 +550,10 @@ void normalizeInputs(int *LX, int *LY, int *RX, int *RY)
   if (abs(*RY - center) < deadband)
     *RY = center;
 
-  *LX = RUDDER_NEUTRAL + ((*LX - center) * RUDDER_RATE_PERCENT) / 100;
+  if (*LX < center)
+    *LX = map(*LX, 0, center, RUDDER_MIN, RUDDER_NEUTRAL);
+  else
+    *LX = map(*LX, center, 4095, RUDDER_NEUTRAL, RUDDER_MAX);
 
   *LX = constrain(*LX, 0, 4095);
   *LY = constrain(*LY, 0, 4095);
